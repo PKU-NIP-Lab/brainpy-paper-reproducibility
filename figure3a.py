@@ -186,7 +186,7 @@ def a5_decision_making_batch_simulation():
 
 
 if __name__ == '__main__':
-  # a1_a2_visualize_channel_and_neuron()
-  # a3_visualize_network()
+  a1_a2_visualize_channel_and_neuron()
+  a3_visualize_network()
   a4_visualize_system()
-  # a5_decision_making_batch_simulation()
+  a5_decision_making_batch_simulation()

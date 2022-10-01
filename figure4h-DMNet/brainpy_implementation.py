@@ -30,14 +30,14 @@ class LIF(bp.dyn.NeuGroup):
     # functions
     self.integral = bp.odeint(lambda V, t: (- self.gL * (V - self.V_L) + self.input) / self.Cm)
 
-  def update(self, _t, _dt):
-    ref = (_t - self.t_last_spike) <= self.t_refractory
-    V = self.integral(self.V, _t, dt=_dt)
+  def update(self, tdi):
+    ref = (tdi.t - self.t_last_spike) <= self.t_refractory
+    V = self.integral(self.V, tdi.t, dt=tdi.dt)
     V = bm.where(ref, self.V, V)
     spike = (V >= self.V_th)
     self.V.value = bm.where(spike, self.V_reset, V)
     self.spike.value = spike
-    self.t_last_spike.value = bm.where(spike, _t, self.t_last_spike)
+    self.t_last_spike.value = bm.where(spike, tdi.t, self.t_last_spike)
     self.refractory.value = bm.logical_or(spike, ref)
     self.input[:] = 0.
 
@@ -63,13 +63,13 @@ class PoissonStim(bp.dyn.NeuGroup):
     self.spike = bm.Variable(bm.zeros(self.num, dtype=bool))
     self.rng = bm.random.RandomState()
 
-  def update(self, _t, _dt):
-    in_interval = bm.logical_and(self.pre_stimulus_period < _t,
-                                 _t < self.pre_stimulus_period + self.stimulus_period)
+  def update(self, tdi):
+    in_interval = bm.logical_and(self.pre_stimulus_period < tdi.t,
+                                 tdi.t < self.pre_stimulus_period + self.stimulus_period)
     prev_freq = bm.where(in_interval, self.freq[0], 0.)
-    in_interval = bm.logical_and(in_interval, (_t - self.freq_t_last_change[0]) >= self.t_interval)
+    in_interval = bm.logical_and(in_interval, (tdi.t - self.freq_t_last_change[0]) >= self.t_interval)
     self.freq[0] = bm.where(in_interval, self.rng.normal(self.freq_mean, self.freq_var), prev_freq)
-    self.freq_t_last_change[0] = bm.where(in_interval, _t, self.freq_t_last_change[0])
+    self.freq_t_last_change[0] = bm.where(in_interval, tdi.t, self.freq_t_last_change[0])
     self.spike.value = self.rng.random(self.num) < self.freq[0] * self.dt
 
 
@@ -191,12 +191,6 @@ class DecisionMaking(bp.dyn.Network):
     self.IA = IA
     self.IB = IB
 
-  def update(self, _t, _dt):
-    nodes = self.nodes(level=1, include_self=False)
-    nodes = nodes.subset(bp.dyn.DynamicalSystem).unique()
-    for node in nodes.values():
-      node.update(_t, _dt)
-
 
 def build_and_run(scale, file=None,
                   pre_stimulus_period=500.,
@@ -223,21 +217,15 @@ def build_and_run(scale, file=None,
 if __name__ == '__main__':
   import sys
 
-  if len(sys.argv) == 1:
-    platform = 'cpu'
-    bp.math.set_platform('cpu')
-  else:
-    if sys.argv[1] == 'gpu':
-      platform = 'gpu'
-      bp.math.set_platform('gpu')
-    else:
-      raise ValueError
+  platform = 'cpu'
+
+  bp.math.set_platform(platform)
   name = f'brainpy-v2-{platform}'
 
   # for scale in [a / 4 for a in range(1, 41, 2)]:
   #   build_and_run(scale=scale)
 
-  build_and_run(scale=(1e5 / 2e3), file=None, progress_bar=True)
+  build_and_run(scale=1., file=None, progress_bar=True)
 
   # with open(f'speed_results/{name}.txt', 'w') as fout:
   #   for size in [1e3, 5e3, 1e4, 5e4, 1e5, 5e5, 1e6, 2e6]:

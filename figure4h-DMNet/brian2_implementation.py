@@ -596,8 +596,6 @@ def getting_started(scale=1.):
 
 
 if __name__ == '__main__':
-  import json
-  import numpy as np
 
   import sys
 
