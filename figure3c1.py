@@ -41,7 +41,7 @@ def int_s2(s2, t, s1, coh=0.5, mu=20.):
 def phase_plane_analysis():
   plt.rcParams.update({"font.size": 15})
 
-  fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6)
+  fig, gs = bp.visualize.get_figure(1, 1, 3, 4)
   fig.add_subplot(gs[0, 0])
 
   # phase plane analysis
@@ -57,8 +57,13 @@ def phase_plane_analysis():
   analyzer.plot_fixed_point()
   plt.legend().get_frame().set_facecolor('none')
   ax = plt.gca()
+  ax.get_legend().remove()
   ax.spines['right'].set_color('none')
   ax.spines['top'].set_color('none')
+  # plt.xlabel('')
+  # plt.ylabel('')
+  plt.xticks([])
+  plt.yticks([])
   plt.title('Phase Plane Analysis')
   analyzer.show_figure()
 

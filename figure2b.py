@@ -4,9 +4,9 @@ import brainpy as bp
 import brainpy.math as bm
 import numpy as np
 from brainpy.connect import FixedProb
-from brainpy.dyn.channels import INa_TM1991, IL
-from brainpy.dyn.synapses import Exponential
-from brainpy.dyn.synouts import COBA
+from brainpy.channels import INa_TM1991, IL
+from brainpy.synapses import Exponential
+from brainpy.synouts import COBA
 
 comp_method = 'sparse'
 area_names = ['V1', 'V2', 'V4', 'TEO', 'TEpd']
@@ -17,7 +17,7 @@ num_exc = 3200
 num_inh = 800
 
 
-class IK(bp.dyn.Channel):
+class IK(bp.Channel):
   def __init__(self, size, E=-90., g_max=10., phi=1., V_sh=-50., method='exp_euler'):
     super(IK, self).__init__(size)
     self.g_max, self.E, self.V_sh, self.phi = g_max, E, V_sh, phi
@@ -37,7 +37,7 @@ class IK(bp.dyn.Channel):
     return self.g_max * self.p ** 4 * (self.E - V)
 
 
-class HH(bp.dyn.CondNeuGroup):
+class HH(bp.CondNeuGroup):
   def __init__(self, size, V_initializer=bp.init.Uniform(-70, -50.), method='exp_auto'):
     super(HH, self).__init__(size, V_initializer=V_initializer)
     self.IK = IK(size, g_max=30., V_sh=-63., method=method)
@@ -45,7 +45,7 @@ class HH(bp.dyn.CondNeuGroup):
     self.IL = IL(size, E=-60., g_max=0.05)
 
 
-class Network(bp.dyn.Network):
+class Network(bp.Network):
   def __init__(self, num_E, num_I, gEE=0.03, gEI=0.03, gIE=0.335, gII=0.335):
     super(Network, self).__init__()
     self.E, self.I = HH(num_E), HH(num_I)
@@ -71,7 +71,7 @@ class Network(bp.dyn.Network):
                            comp_method=comp_method)
 
 
-class Projection(bp.dyn.DynamicalSystem):
+class Projection(bp.DynamicalSystem):
   def __init__(self, pre, post, delay, conn, gEE=0.03, gEI=0.03, tau=5.):
     super(Projection, self).__init__()
     self.E2E = Exponential(pre.E, post.E, bp.conn.FixedProb(0.02),
@@ -92,7 +92,7 @@ class Projection(bp.dyn.DynamicalSystem):
     self.E2I.update(tdi)
 
 
-class System(bp.dyn.System):
+class System(bp.Network):
   def __init__(self, conn, delay, gEE=0.03, gEI=0.03, gIE=0.335, gII=0.335):
     super(System, self).__init__()
 

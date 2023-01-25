@@ -22,7 +22,7 @@ we = 6.  # excitatory synaptic conductance [nS]
 wi = 67.  # inhibitory synaptic conductance [nS]
 
 
-class HH(bp.dyn.NeuGroup):
+class HH(bp.NeuGroup):
   def __init__(self, size, method='exp_auto'):
     super(HH, self).__init__(size)
 
@@ -72,7 +72,7 @@ class HH(bp.dyn.NeuGroup):
     self.input[:] = 0.
 
 
-class COBAHH(bp.dyn.Network):
+class COBAHH(bp.Network):
   def __init__(self, scale=1., method='exp_auto'):
     super(COBAHH, self).__init__()
     num_exc = int(3200 * scale)
@@ -100,7 +100,7 @@ class COBAHH(bp.dyn.Network):
 
 
 def run(scale, duration, res_dict=None):
-  runner = bp.dyn.DSRunner(COBAHH(scale=scale))
+  runner = bp.DSRunner(COBAHH(scale=scale))
   t, _ = runner.predict(duration, eval_time=True)
   if res_dict is not None:
     res_dict['brainpy'].append({'num_neuron': runner.target.num,
@@ -113,11 +113,13 @@ def run(scale, duration, res_dict=None):
 if __name__ == '__main__':
   import json
 
-  speed_res = {'brainpy': []}
-  for scale in [1, 2, 4, 6, 8, 10, 15, 20, 30]:
-  # for scale in [15, 20, 30]:
-    for stim in [10. * 1e3]:
-      run(scale=scale, res_dict=speed_res, duration=stim)
+  run(scale=4, res_dict=None, duration=1e4)
 
-  with open('speed_results/brainpy-2.json', 'w') as f:
-    json.dump(speed_res, f, indent=2)
+  # speed_res = {'brainpy': []}
+  # for scale in [1, 2, 4, 6, 8, 10, 15, 20, 30]:
+  # # for scale in [15, 20, 30]:
+  #   for stim in [10. * 1e3]:
+  #     run(scale=scale, res_dict=speed_res, duration=stim)
+  #
+  # with open('speed_results/brainpy-2.json', 'w') as f:
+  #   json.dump(speed_res, f, indent=2)

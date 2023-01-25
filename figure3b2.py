@@ -53,17 +53,17 @@ class RNN(bp.Base):
     self.mask = bm.asarray(mask, dtype=bm.float_)
 
     # input weight
-    self.w_ir = bm.TrainVar(bp.init.init_param(w_ir, (num_input, num_hidden)))
+    self.w_ir = bm.TrainVar(bp.init.parameter(w_ir, (num_input, num_hidden)))
 
     # recurrent weight
     bound = 1 / num_hidden ** 0.5
-    self.w_rr = bm.TrainVar(bp.init.init_param(w_rr, (num_hidden, num_hidden)))
+    self.w_rr = bm.TrainVar(bp.init.parameter(w_rr, (num_hidden, num_hidden)))
     self.w_rr[:, :self.e_size] /= (self.e_size / self.i_size)
     self.b_rr = bm.TrainVar(self.rng.uniform(-bound, bound, num_hidden))
 
     # readout weight
     bound = 1 / self.e_size ** 0.5
-    self.w_ro = bm.TrainVar(bp.init.init_param(w_ro, (self.e_size, num_output)))
+    self.w_ro = bm.TrainVar(bp.init.parameter(w_ro, (self.e_size, num_output)))
     self.b_ro = bm.TrainVar(self.rng.uniform(-bound, bound, num_output))
 
     # variables
@@ -89,7 +89,7 @@ class RNN(bp.Base):
 
   def predict(self, xs):
     self.h[:] = 0.
-    return bm.for_loop(self.make_update(self.h, self.o), self.vars(), xs)
+    return bm.for_loop(self.make_update(self.h, self.o), xs, dyn_vars=self.vars())
 
   def loss(self, xs, ys):
     hs, os = self.predict(xs)
@@ -99,12 +99,13 @@ class RNN(bp.Base):
 
 # Instantiate the network and print information
 hidden_size = 50
-net = RNN(num_input=input_size,
-          num_hidden=hidden_size,
-          num_output=output_size,
-          num_batch=batch_size,
-          dt=env.dt,
-          sigma_rec=0.15)
+with bm.training_environment():
+  net = RNN(num_input=input_size,
+            num_hidden=hidden_size,
+            num_output=output_size,
+            num_batch=batch_size,
+            dt=env.dt,
+            sigma_rec=0.15)
 
 # Adam optimizer
 opt = bp.optim.Adam(lr=0.001, train_vars=net.train_vars().unique())
@@ -117,7 +118,7 @@ grad_f = bm.grad(net.loss,
 
 
 @bm.jit
-@bm.function(nodes=(net, opt))
+@bm.to_object(child_objs=(net, opt))
 def train(xs, ys):
   grads, loss = grad_f(xs, ys)
   opt.update(grads)

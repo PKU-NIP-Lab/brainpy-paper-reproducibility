@@ -6,7 +6,7 @@ import brainpy.math as bm
 import matplotlib.pyplot as plt
 
 
-class PoissonStim(bp.dyn.NeuGroup):
+class PoissonStim(bp.NeuGroup):
   def __init__(self, size, freq_mean, freq_var, t_interval,
                pre_stimulus_period=500., stimulus_period=1000.,
                delay_period=500.):
@@ -45,7 +45,7 @@ class PoissonStim(bp.dyn.NeuGroup):
     self.spike.value = self.rng.random(shape) < self.freq * self.dt
 
 
-class DecisionMakingNet(bp.dyn.Network):
+class DecisionMakingNet(bp.Network):
   def __init__(self, scale=1., mu0=40., coherence=25.6, f=0.15,
                pre_stimulus_period=100.,
                stimulus_period=1000.,
@@ -206,7 +206,7 @@ def single_run():
 
   net = DecisionMakingNet(coherence=-80., mu0=50.)
 
-  runner = bp.dyn.DSRunner(
+  runner = bp.DSRunner(
     net, monitors=['A.spike', 'B.spike', 'IA.freq', 'IB.freq']
   )
   runner.run(total_period)

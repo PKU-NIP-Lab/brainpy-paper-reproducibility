@@ -33,7 +33,7 @@ input_f0 = 40. / 1000.  # poisson firing rate of input neurons in khz
 regularization_f0 = reg_rate / 1000.  # mean target network firing frequency
 
 
-class EligSNN(bp.dyn.Network):
+class EligSNN(bp.Network):
   def __init__(self, num_in, num_rec, num_out, eprop=True, tau_a=2e3, tau_v=2e1):
     super(EligSNN, self).__init__()
 
@@ -45,7 +45,7 @@ class EligSNN(bp.dyn.Network):
 
     # neurons
     self.i = bp.neurons.InputGroup(num_in)
-    self.o = bp.neurons.LeakyIntegrator(num_out, tau=20, mode=bp.modes.training)
+    self.o = bp.neurons.LeakyIntegrator(num_out, tau=20, mode=bm.training_mode)
 
     n_regular = int(num_rec / 2)
     n_adaptive = num_rec - n_regular
@@ -57,7 +57,7 @@ class EligSNN(bp.dyn.Network):
       tau_a=tau_a, tau=tau_v, beta=beta,
       V_initializer=bp.init.ZeroInit(),
       a_initializer=bp.init.ZeroInit(),
-      mode=bp.modes.training, eprop=eprop
+      mode=bm.training_mode, eprop=eprop
     )
 
     # synapses
@@ -75,7 +75,7 @@ class EligSNN(bp.dyn.Network):
 
   def update(self, shared, x):
     self.r.input += self.i2r(shared, x)
-    z = self.r.spike if self.eprop else stop_gradient(self.r.spike.value)
+    z = stop_gradient(self.r.spike.value) if self.eprop else self.r.spike.value
     self.r.input += self.r2r(shared, z)
     self.r(shared)
     self.o.input += self.r2o(shared, self.r.spike.value)
@@ -83,7 +83,8 @@ class EligSNN(bp.dyn.Network):
     return self.o.V.value
 
 
-net = EligSNN(num_in=40, num_rec=100, num_out=2, eprop=False)
+with bm.training_environment():
+  net = EligSNN(num_in=40, num_rec=100, num_out=2, eprop=True)
 
 
 @bp.tools.numba_jit
@@ -167,7 +168,7 @@ def loss_fun(predicts, targets):
 
 
 # Training
-trainer = bp.train.BPTT(
+trainer = bp.BPTT(
   net,
   loss_fun,
   loss_has_aux=True,
@@ -180,7 +181,7 @@ trainer.fit(get_data(n_batch, n_in=net.num_in, t_interval=t_cue_spacing, f0=inpu
 
 # visualization
 dataset, _ = next(get_data(20, n_in=net.num_in, t_interval=t_cue_spacing, f0=input_f0)())
-runner = bp.train.DSTrainer(net, monitors={'spike': net.r.spike})
+runner = bp.DSTrainer(net, monitors={'spike': net.r.spike})
 outs = runner.predict(dataset, reset_state=True)
 
 for i in range(10):
@@ -224,3 +225,4 @@ for i in range(10):
   ax_out.set_xlabel('Time [ms]')
   plt.legend()
   plt.show()
+

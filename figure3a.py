@@ -40,7 +40,7 @@ def a1_a2_visualize_channel_and_neuron():
 def a3_visualize_network(seed=20873, gEE=0.03, gEI=0.03, gIE=.335, gII=0.335, ):
   bm.random.seed(seed)
   model = Network(num_exc, num_inh, gEE=gEE, gEI=gEI, gIE=gIE, gII=gII)
-  runner = bp.dyn.DSRunner(model, monitors={'exc.spike': model.E.spike})
+  runner = bp.DSRunner(model, monitors={'exc.spike': model.E.spike})
   runner.run(200.)
 
   plt.rcParams.update({"font.size": 15})
@@ -78,9 +78,9 @@ def a4_visualize_system():
   inputs, duration = bp.inputs.section_input([0., 1., 0.],
                                              [400., 100., 300.],
                                              return_length=True)
-  runner = bp.dyn.DSRunner(
+  runner = bp.DSRunner(
     model,
-    fun_monitors={
+    monitors={
       'exc.spike': lambda tdi: bm.concatenate([area.E.spike for area in model.areas]),
     },
     inputs=[model.areas[0].E.input, inputs, 'iter'],
@@ -119,7 +119,7 @@ def a5_decision_making_batch_simulation():
     net = DecisionMakingNet(coherence=coh,
                             stimulus_period=len_stimulus,
                             pre_stimulus_period=len_pre_stimulus)
-    runner = bp.dyn.DSRunner(
+    runner = bp.DSRunner(
       net,
       monitors=['A.spike', 'B.spike', 'IA.freq', 'IB.freq'],
       numpy_mon_after_run=False,

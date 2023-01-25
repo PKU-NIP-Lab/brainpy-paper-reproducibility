@@ -1,1 +1,1 @@
-brainpy>=2.2.0
+brainpy>=2.3.0

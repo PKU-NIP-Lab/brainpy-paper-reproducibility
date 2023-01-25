@@ -4,13 +4,14 @@ import numpy as np
 
 import brainpy as bp
 import brainpy.math as bm
+import brainpy_datasets as bd
 import matplotlib.pyplot as plt
 
 bm.enable_x64()
 
 
 def get_subset(data, start, end):
-  res = {'x': data['x'][start: end], 'y': data['y'][start: end], 'z': data['z'][start: end]}
+  res = {'x': data.xs[start: end], 'y': data.ys[start: end], 'z': data.zs[start: end]}
   X = bm.hstack([res['x'], res['y']])
   X = X.reshape((1,) + X.shape)
   Y = res['z']
@@ -87,11 +88,10 @@ num_test = int(t_test / dt)
 
 # Datasets #
 # -------- #
-lorenz_series = bp.datasets.lorenz_series(t_warmup + t_train + t_test, dt=dt,
-                                          inits={'x': 17.67715816276679,
-                                                 'y': 12.931379185960404,
-                                                 'z': 43.91404334248268})
-
+lorenz_series = bd.chaos.LorenzEq(t_warmup + t_train + t_test, dt=dt,
+                                  inits={'x': 17.67715816276679,
+                                         'y': 12.931379185960404,
+                                         'z': 43.91404334248268})
 X_warmup, Y_warmup = get_subset(lorenz_series, 0, num_warmup)
 X_train, Y_train = get_subset(lorenz_series, num_warmup, num_warmup + num_train)
 X_test, Y_test = get_subset(lorenz_series, 0, num_warmup + num_train + num_test)
@@ -99,23 +99,24 @@ X_test, Y_test = get_subset(lorenz_series, 0, num_warmup + num_train + num_test)
 # Model #
 # ----- #
 
-class NGRC(bp.dyn.DynamicalSystem):
+class NGRC(bp.DynamicalSystem):
   def __init__(self, num_in):
     super(NGRC, self).__init__()
-    self.r = bp.layers.NVAR(num_in, delay=4, order=2, stride=5, mode=bp.modes.batching)
-    self.o = bp.layers.Dense(self.r.num_out, 1, mode=bp.modes.training)
+    self.r = bp.layers.NVAR(num_in, delay=4, order=2, stride=5)
+    self.o = bp.layers.Dense(self.r.num_out, 1, mode=bm.training_mode)
 
   def update(self, sha, x):
     return self.o(sha, self.r(sha, x))
 
 
-model = NGRC(2)
+with bm.batching_environment():
+    model = NGRC(2)
 
 
 # Training #
 # -------- #
 
-trainer = bp.train.RidgeTrainer(model, alpha=0.05)
+trainer = bp.RidgeTrainer(model, alpha=0.05)
 
 # warm-up
 outputs = trainer.predict(X_warmup)
@@ -128,7 +129,7 @@ trainer.fit([X_train, Y_train])
 outputs = trainer.predict(X_test, reset_state=True)
 print('Prediction NMS: ', bp.losses.mean_squared_error(outputs, Y_test))
 
-plot_lorenz(x=bm.as_numpy(lorenz_series['x'].flatten()),
-            y=bm.as_numpy(lorenz_series['y'].flatten()),
-            true_z=bm.as_numpy(lorenz_series['z'].flatten()),
+plot_lorenz(x=bm.as_numpy(lorenz_series.xs.flatten()),
+            y=bm.as_numpy(lorenz_series.ys.flatten()),
+            true_z=bm.as_numpy(lorenz_series.zs.flatten()),
             predict_z=bm.as_numpy(outputs.flatten()))

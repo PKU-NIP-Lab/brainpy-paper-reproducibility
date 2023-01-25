@@ -2,6 +2,7 @@
 
 import brainpy as bp
 import brainpy.math as bm
+import brainpylib as bl
 
 assert bp.__version__ > '2.2.0'
 
@@ -17,7 +18,7 @@ Ib = 20.
 ref = 5.0
 
 
-class LIF(bp.dyn.NeuGroup):
+class LIF(bp.NeuGroup):
   def __init__(self, size, **kwargs):
     super(LIF, self).__init__(size=size, **kwargs)
 
@@ -45,7 +46,7 @@ class LIF(bp.dyn.NeuGroup):
     self.input[:] = Ib
 
 
-class ExpCOBA(bp.dyn.TwoEndConn):
+class ExpCOBA(bp.TwoEndConn):
   def __init__(self, pre, post, conn, E, w, tau, **kwargs):
     super(ExpCOBA, self).__init__(pre, post, conn=conn, **kwargs)
 
@@ -59,7 +60,9 @@ class ExpCOBA(bp.dyn.TwoEndConn):
     self.g = bm.Variable(bm.zeros(post.num))  # variables
 
   def update(self, tdi):
-    syn_vs = bm.pre2post_event_sum(self.pre.spike, self.pre2post, self.post.num, self.w)
+    # syn_vs = bm.pre2post_event_sum(self.pre.spike, self.pre2post, self.post.num, self.w)
+    syn_vs = bl.event_csr_matvec(self.w, self.pre2post[0], self.pre2post[1], self.pre.spike,
+                                 shape=(self.pre.num, self.post.num), transpose=True)
     self.g.value = self.g - self.g / self.tau * tdi.dt + syn_vs
     self.post.input += self.g * (self.E - self.post.V)
 
@@ -83,8 +86,8 @@ def run1(scale=10, duration=1e3):
 
   # running
   net = bp.Network(E2E, E2I, I2I, I2E, E=E, I=I)
-  runner = bp.dyn.DSRunner(net)
-  t = runner.run(duration)
+  runner = bp.DSRunner(net)
+  t = runner.run(duration, eval_time=True)[0]
   print(f'size = {num_exc + num_inh}, running time = {t} s')
 
   # runner = bp.dyn.DSRunner(net, monitors=['E.spike'])
