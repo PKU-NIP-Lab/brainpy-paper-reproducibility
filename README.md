@@ -5,6 +5,14 @@ These codes are used to reproduce figures in our BrainPy manuscript.
 First, please follow the official [installation](https://brainpy.readthedocs.io/en/latest/quickstart/installation.html) 
 link to install [BrainPy](https://github.com/PKU-NIP-Lab/BrainPy) package. 
 
+```bash
+pip install brainpy 
+pip install brainpylib
+pip install brainpy-datasets
+```
+
+
+
 Second, to reproduce the figures, please use the command of 
 
 ```bash
