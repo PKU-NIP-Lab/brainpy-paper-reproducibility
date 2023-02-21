@@ -172,7 +172,7 @@ trainer = bp.BPTT(
   net,
   loss_fun,
   loss_has_aux=True,
-  optimizer=bp.optimizers.Adam(lr=0.01),
+  optimizer=bp.optim.Adam(lr=0.01),
   monitors={'r.spike': net.r.spike},
 )
 trainer.fit(get_data(n_batch, n_in=net.num_in, t_interval=t_cue_spacing, f0=input_f0),

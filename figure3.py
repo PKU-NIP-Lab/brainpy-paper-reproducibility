@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from jax import vmap
 
-from figure2b import HH, Network, System, area_names, num_exc, num_inh, conn_data, delay_data
+from figure2 import HH, Network, System, area_names, num_exc, num_inh, conn_data, delay_data
 from src.decision_making_network import DecisionMakingNet
 
 
