@@ -10,7 +10,7 @@ class PoissonStim(bp.NeuGroup):
   def __init__(self, size, freq_mean, freq_var, t_interval,
                pre_stimulus_period=500., stimulus_period=1000.,
                delay_period=500.):
-    super(PoissonStim, self).__init__(size=size)
+    super().__init__(size=size)
 
     # parameters
     self.freq_mean = freq_mean
@@ -19,45 +19,83 @@ class PoissonStim(bp.NeuGroup):
     self.pre_stimulus_period = pre_stimulus_period
     self.stimulus_period = stimulus_period
     self.delay_period = delay_period
-    self.dt = bm.get_dt() / 1000.
 
-    # variables
-    self.freq = bp.init.variable(bm.zeros, None, 1)
-    self.freq_t_last_change = bp.init.variable(lambda s: bm.ones(s) * -1e7, None, 1)
-    self.spike = bp.init.variable(lambda s: bm.zeros(s, dtype=bool), None, self.varshape)
-    self.rng = bm.random.RandomState()
+    self.reset_state(self.mode)
 
   def reset_state(self, batch_size=None):
-    self.freq.value = bp.init.variable(bm.zeros, batch_size, 1)
-    self.freq_t_last_change.value = bp.init.variable(lambda s: bm.ones(s) * -1e7, batch_size, 1)
-    self.spike.value = bp.init.variable(lambda s: bm.zeros(s, dtype=bool), batch_size, self.varshape)
+    self.freq = bp.init.variable(bm.zeros, batch_size, 1)
+    self.freq_t_last_change = bp.init.variable(lambda s: bm.ones(s) * -1e7, batch_size, 1)
+    self.spike = bp.init.variable(lambda s: bm.zeros(s, dtype=bool), batch_size, self.varshape)
 
-  def update(self, tdi):
-    t, dt = tdi['t'], tdi['dt']
+  def update(self):
+    t = bp.share['t']
     in_interval = bm.logical_and(self.pre_stimulus_period < t,
                                  t < self.pre_stimulus_period + self.stimulus_period)
     in_interval = bm.ones_like(self.freq, dtype=bool) * in_interval
     prev_freq = bm.where(in_interval, self.freq, 0.)
     in_interval = bm.logical_and(in_interval, (t - self.freq_t_last_change) >= self.t_interval)
-    self.freq.value = bm.where(in_interval, self.rng.normal(self.freq_mean, self.freq_var, self.freq.shape), prev_freq)
+    self.freq.value = bm.where(in_interval, bm.random.normal(self.freq_mean, self.freq_var, self.freq.shape), prev_freq)
     self.freq_t_last_change.value = bm.where(in_interval, t, self.freq_t_last_change)
-    shape = (self.spike.shape[:1] + self.varshape) if isinstance(self.mode, bp.modes.BatchingMode) else self.varshape
-    self.spike.value = self.rng.random(shape) < self.freq * self.dt
+    self.spike.value = bm.random.rand_like(self.spike) < self.freq * bp.share['dt'] / 1000.
+    return self.spike
+
+  def return_info(self):
+    return self.spike
 
 
-class DecisionMakingNet(bp.Network):
-  def __init__(self, scale=1., mu0=40., coherence=25.6, f=0.15,
-               pre_stimulus_period=100.,
-               stimulus_period=1000.,
-               delay_period=500.):
-    super(DecisionMakingNet, self).__init__()
+class Exponential(bp.Projection):
+  def __init__(self, pre, post, conn, delay, g_max, tau, E):
+    super().__init__()
+    if isinstance(conn, bp.conn.All2All):
+      comm = bp.dnn.AllToAll(pre.num, post.num, g_max)
+    elif isinstance(conn, bp.conn.One2One):
+      comm = bp.dnn.OneToOne(pre.num, g_max)
+    else:
+      raise ValueError
+    syn = bp.dyn.Expon.desc(post.num, tau=tau)
+    out = bp.dyn.COBA.desc(E=E)
+    self.proj = bp.dyn.ProjAlignPostMg2(
+      pre=pre, delay=delay, comm=comm,
+      syn=syn, out=out, post=post
+    )
+
+  def update(self, *args, **kwargs):
+    self.proj()
+
+
+class NMDA(bp.Projection):
+  def __init__(self, pre, post, conn, delay, g_max):
+    super().__init__()
+    if isinstance(conn, bp.conn.All2All):
+      comm = bp.dnn.AllToAll(pre.num, post.num, g_max)
+    elif isinstance(conn, bp.conn.One2One):
+      comm = bp.dnn.OneToOne(pre.num, g_max)
+    else:
+      raise ValueError
+    syn = bp.dyn.NMDA.desc(pre.num, a=0.5, tau_decay=100., tau_rise=2.)
+    out = bp.dyn.MgBlock(E=0., cc_Mg=1.0)
+    self.proj = bp.dyn.ProjAlignPreMg2(
+      pre=pre, delay=delay, syn=syn,
+      comm=comm, out=out, post=post
+    )
+
+  def update(self, *args, **kwargs):
+    self.proj()
+
+
+class DecisionMakingNet(bp.DynSysGroup):
+  def __init__(
+      self, scale=1., mu0=40., coherence=25.6, f=0.15,
+      pre_stimulus_period=100., stimulus_period=1000., delay_period=500.
+  ):
+    super().__init__()
 
     num_exc = int(1600 * scale)
-    num_inh = int(400 * scale)
+    num_I = int(400 * scale)
     num_A = int(f * num_exc)
     num_B = int(f * num_exc)
     num_N = num_exc - num_A - num_B
-    print(f'Total network size: {num_exc + num_inh}')
+    print(f'Total network size: {num_exc + num_I}')
 
     poisson_freq = 2400.  # Hz
     w_pos = 1.7
@@ -71,78 +109,72 @@ class DecisionMakingNet(bp.Network):
     g_I2E_GABAa = 1.3 / scale  # nS
     g_I2I_GABAa = 1.0 / scale  # nS
 
-    ampa_par = dict(delay_step=int(0.5 / bm.get_dt()), tau=2.0, output=bp.synouts.COBA(E=0.), )
-    gaba_par = dict(delay_step=int(0.5 / bm.get_dt()), tau=5.0, output=bp.synouts.COBA(E=-70.), )
-    nmda_par = dict(delay_step=int(0.5 / bm.get_dt()), tau_decay=100, tau_rise=2., a=0.5,
-                    output=bp.synouts.MgBlock(E=0., cc_Mg=1.), )
     neu_par = dict(V_rest=-70., V_reset=-55., V_th=-50., V_initializer=bp.init.OneInit(-70.))
-    stim_par = dict(freq_var=10., t_interval=50.,
-                    pre_stimulus_period=pre_stimulus_period,
-                    stimulus_period=stimulus_period,
-                    delay_period=delay_period)
+    stim_par = dict(freq_var=10., t_interval=50., pre_stimulus_period=pre_stimulus_period,
+                    stimulus_period=stimulus_period, delay_period=delay_period)
 
     # E neurons/pyramid neurons
-    A = bp.neurons.LIF(num_A, tau=20., R=0.04, tau_ref=2., **neu_par)
-    B = bp.neurons.LIF(num_B, tau=20., R=0.04, tau_ref=2., **neu_par)
-    N = bp.neurons.LIF(num_N, tau=20., R=0.04, tau_ref=2., **neu_par)
+    A = bp.dyn.LifRef(num_A, tau=20., R=0.04, tau_ref=2., **neu_par)
+    B = bp.dyn.LifRef(num_B, tau=20., R=0.04, tau_ref=2., **neu_par)
+    N = bp.dyn.LifRef(num_N, tau=20., R=0.04, tau_ref=2., **neu_par)
 
     # I neurons/interneurons
-    I = bp.neurons.LIF(num_inh, tau=10., R=0.05, tau_ref=1., **neu_par)
+    I = bp.dyn.LifRef(num_I, tau=10., R=0.05, tau_ref=1., **neu_par)
 
     # poisson stimulus
     IA = PoissonStim(num_A, freq_mean=mu0 + mu0 / 100. * coherence, **stim_par)
     IB = PoissonStim(num_B, freq_mean=mu0 - mu0 / 100. * coherence, **stim_par)
 
     # noise neurons
-    self.noise_B = bp.neurons.PoissonGroup(num_B, freqs=poisson_freq)
-    self.noise_A = bp.neurons.PoissonGroup(num_A, freqs=poisson_freq)
-    self.noise_N = bp.neurons.PoissonGroup(num_N, freqs=poisson_freq)
-    self.noise_I = bp.neurons.PoissonGroup(num_inh, freqs=poisson_freq)
+    self.noise_B = bp.dyn.PoissonGroup(num_B, freqs=poisson_freq)
+    self.noise_A = bp.dyn.PoissonGroup(num_A, freqs=poisson_freq)
+    self.noise_N = bp.dyn.PoissonGroup(num_N, freqs=poisson_freq)
+    self.noise_I = bp.dyn.PoissonGroup(num_I, freqs=poisson_freq)
 
     # define external inputs
-    self.IA2A = bp.synapses.Exponential(IA, A, bp.conn.One2One(), g_max=g_ext2E_AMPA, **ampa_par)
-    self.IB2B = bp.synapses.Exponential(IB, B, bp.conn.One2One(), g_max=g_ext2E_AMPA, **ampa_par)
+    self.IA2A = Exponential(IA, A, bp.conn.One2One(), delay=None, g_max=g_ext2E_AMPA, tau=2., E=0.)
+    self.IB2B = Exponential(IB, B, bp.conn.One2One(), delay=None, g_max=g_ext2E_AMPA, tau=2., E=0.)
 
     # define E->E/I conn
 
-    self.N2B_AMPA = bp.synapses.Exponential(N, B, bp.conn.All2All(), g_max=g_E2E_AMPA * w_neg, **ampa_par)
-    self.N2A_AMPA = bp.synapses.Exponential(N, A, bp.conn.All2All(), g_max=g_E2E_AMPA * w_neg, **ampa_par)
-    self.N2N_AMPA = bp.synapses.Exponential(N, N, bp.conn.All2All(), g_max=g_E2E_AMPA, **ampa_par)
-    self.N2I_AMPA = bp.synapses.Exponential(N, I, bp.conn.All2All(), g_max=g_E2I_AMPA, **ampa_par)
-    self.N2B_NMDA = bp.synapses.NMDA(N, B, bp.conn.All2All(), g_max=g_E2E_NMDA * w_neg, **nmda_par)
-    self.N2A_NMDA = bp.synapses.NMDA(N, A, bp.conn.All2All(), g_max=g_E2E_NMDA * w_neg, **nmda_par)
-    self.N2N_NMDA = bp.synapses.NMDA(N, N, bp.conn.All2All(), g_max=g_E2E_NMDA, **nmda_par)
-    self.N2I_NMDA = bp.synapses.NMDA(N, I, bp.conn.All2All(), g_max=g_E2I_NMDA, **nmda_par)
+    self.N2B_AMPA = Exponential(N, B, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA * w_neg, tau=2., E=0.)
+    self.N2A_AMPA = Exponential(N, A, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA * w_neg, tau=2., E=0.)
+    self.N2N_AMPA = Exponential(N, N, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA, tau=2., E=0.)
+    self.N2I_AMPA = Exponential(N, I, bp.conn.All2All(), delay=0.5, g_max=g_E2I_AMPA, tau=2., E=0.)
+    self.N2B_NMDA = NMDA(N, B, bp.conn.All2All(), delay=0.5, g_max=g_E2E_NMDA * w_neg)
+    self.N2A_NMDA = NMDA(N, A, bp.conn.All2All(), delay=0.5, g_max=g_E2E_NMDA * w_neg)
+    self.N2N_NMDA = NMDA(N, N, bp.conn.All2All(), delay=0.5, g_max=g_E2E_NMDA)
+    self.N2I_NMDA = NMDA(N, I, bp.conn.All2All(), delay=0.5, g_max=g_E2I_NMDA)
 
-    self.B2B_AMPA = bp.synapses.Exponential(B, B, bp.conn.All2All(), g_max=g_E2E_AMPA * w_pos, **ampa_par)
-    self.B2A_AMPA = bp.synapses.Exponential(B, A, bp.conn.All2All(), g_max=g_E2E_AMPA * w_neg, **ampa_par)
-    self.B2N_AMPA = bp.synapses.Exponential(B, N, bp.conn.All2All(), g_max=g_E2E_AMPA, **ampa_par)
-    self.B2I_AMPA = bp.synapses.Exponential(B, I, bp.conn.All2All(), g_max=g_E2I_AMPA, **ampa_par)
-    self.B2B_NMDA = bp.synapses.NMDA(B, B, bp.conn.All2All(), g_max=g_E2E_NMDA * w_pos, **nmda_par)
-    self.B2A_NMDA = bp.synapses.NMDA(B, A, bp.conn.All2All(), g_max=g_E2E_NMDA * w_neg, **nmda_par)
-    self.B2N_NMDA = bp.synapses.NMDA(B, N, bp.conn.All2All(), g_max=g_E2E_NMDA, **nmda_par)
-    self.B2I_NMDA = bp.synapses.NMDA(B, I, bp.conn.All2All(), g_max=g_E2I_NMDA, **nmda_par)
+    self.B2B_AMPA = Exponential(B, B, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA * w_pos, tau=2., E=0.)
+    self.B2A_AMPA = Exponential(B, A, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA * w_neg, tau=2., E=0.)
+    self.B2N_AMPA = Exponential(B, N, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA, tau=2., E=0.)
+    self.B2I_AMPA = Exponential(B, I, bp.conn.All2All(), delay=0.5, g_max=g_E2I_AMPA, tau=2., E=0.)
+    self.B2B_NMDA = NMDA(B, B, bp.conn.All2All(), delay=0.5, g_max=g_E2E_NMDA * w_pos)
+    self.B2A_NMDA = NMDA(B, A, bp.conn.All2All(), delay=0.5, g_max=g_E2E_NMDA * w_neg)
+    self.B2N_NMDA = NMDA(B, N, bp.conn.All2All(), delay=0.5, g_max=g_E2E_NMDA)
+    self.B2I_NMDA = NMDA(B, I, bp.conn.All2All(), delay=0.5, g_max=g_E2I_NMDA)
 
-    self.A2B_AMPA = bp.synapses.Exponential(A, B, bp.conn.All2All(), g_max=g_E2E_AMPA * w_neg, **ampa_par)
-    self.A2A_AMPA = bp.synapses.Exponential(A, A, bp.conn.All2All(), g_max=g_E2E_AMPA * w_pos, **ampa_par)
-    self.A2N_AMPA = bp.synapses.Exponential(A, N, bp.conn.All2All(), g_max=g_E2E_AMPA, **ampa_par)
-    self.A2I_AMPA = bp.synapses.Exponential(A, I, bp.conn.All2All(), g_max=g_E2I_AMPA, **ampa_par)
-    self.A2B_NMDA = bp.synapses.NMDA(A, B, bp.conn.All2All(), g_max=g_E2E_NMDA * w_neg, **nmda_par)
-    self.A2A_NMDA = bp.synapses.NMDA(A, A, bp.conn.All2All(), g_max=g_E2E_NMDA * w_pos, **nmda_par)
-    self.A2N_NMDA = bp.synapses.NMDA(A, N, bp.conn.All2All(), g_max=g_E2E_NMDA, **nmda_par)
-    self.A2I_NMDA = bp.synapses.NMDA(A, I, bp.conn.All2All(), g_max=g_E2I_NMDA, **nmda_par)
+    self.A2B_AMPA = Exponential(A, B, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA * w_neg, tau=2., E=0.)
+    self.A2A_AMPA = Exponential(A, A, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA * w_pos, tau=2., E=0.)
+    self.A2N_AMPA = Exponential(A, N, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA, tau=2., E=0.)
+    self.A2I_AMPA = Exponential(A, I, bp.conn.All2All(), delay=0.5, g_max=g_E2I_AMPA, tau=2., E=0.)
+    self.A2B_NMDA = NMDA(A, B, bp.conn.All2All(), delay=0.5, g_max=g_E2E_NMDA * w_neg)
+    self.A2A_NMDA = NMDA(A, A, bp.conn.All2All(), delay=0.5, g_max=g_E2E_NMDA * w_pos)
+    self.A2N_NMDA = NMDA(A, N, bp.conn.All2All(), delay=0.5, g_max=g_E2E_NMDA)
+    self.A2I_NMDA = NMDA(A, I, bp.conn.All2All(), delay=0.5, g_max=g_E2I_NMDA)
 
     # define I->E/I conn
-    self.I2B = bp.synapses.Exponential(I, B, bp.conn.All2All(), g_max=g_I2E_GABAa, **gaba_par)
-    self.I2A = bp.synapses.Exponential(I, A, bp.conn.All2All(), g_max=g_I2E_GABAa, **gaba_par)
-    self.I2N = bp.synapses.Exponential(I, N, bp.conn.All2All(), g_max=g_I2E_GABAa, **gaba_par)
-    self.I2I = bp.synapses.Exponential(I, I, bp.conn.All2All(), g_max=g_I2I_GABAa, **gaba_par)
+    self.I2B = Exponential(I, B, bp.conn.All2All(), delay=0.5, g_max=g_I2E_GABAa, tau=5., E=-70.)
+    self.I2A = Exponential(I, A, bp.conn.All2All(), delay=0.5, g_max=g_I2E_GABAa, tau=5., E=-70.)
+    self.I2N = Exponential(I, N, bp.conn.All2All(), delay=0.5, g_max=g_I2E_GABAa, tau=5., E=-70.)
+    self.I2I = Exponential(I, I, bp.conn.All2All(), delay=0.5, g_max=g_I2I_GABAa, tau=5., E=-70.)
 
     # define external projections
-    self.noise2B = bp.synapses.Exponential(self.noise_B, B, bp.conn.One2One(), g_max=g_ext2E_AMPA, **ampa_par)
-    self.noise2A = bp.synapses.Exponential(self.noise_A, A, bp.conn.One2One(), g_max=g_ext2E_AMPA, **ampa_par)
-    self.noise2N = bp.synapses.Exponential(self.noise_N, N, bp.conn.One2One(), g_max=g_ext2E_AMPA, **ampa_par)
-    self.noise2I = bp.synapses.Exponential(self.noise_I, I, bp.conn.One2One(), g_max=g_ext2I_AMPA, **ampa_par)
+    self.noise2B = Exponential(self.noise_B, B, bp.conn.One2One(), delay=None, g_max=g_ext2E_AMPA, tau=2., E=0.)
+    self.noise2A = Exponential(self.noise_A, A, bp.conn.One2One(), delay=None, g_max=g_ext2E_AMPA, tau=2., E=0.)
+    self.noise2N = Exponential(self.noise_N, N, bp.conn.One2One(), delay=None, g_max=g_ext2E_AMPA, tau=2., E=0.)
+    self.noise2I = Exponential(self.noise_I, I, bp.conn.One2One(), delay=None, g_max=g_ext2I_AMPA, tau=2., E=0.)
 
     # nodes
     self.B = B
@@ -205,15 +237,13 @@ def single_run():
   total_period = pre_stimulus_period + stimulus_period + delay_period
 
   net = DecisionMakingNet(coherence=-80., mu0=50.)
-
-  runner = bp.DSRunner(
-    net, monitors=['A.spike', 'B.spike', 'IA.freq', 'IB.freq']
-  )
+  runner = bp.DSRunner(net, monitors=['A.spike', 'B.spike', 'IA.freq', 'IB.freq', 'IA.spike'])
   runner.run(total_period)
 
   fig, gs = bp.visualize.get_figure(4, 1, 3, 10)
   axes = [fig.add_subplot(gs[i, 0]) for i in range(4)]
-  visualize_results(axes, mon=runner.mon, pre_stimulus_period=pre_stimulus_period,
+  visualize_results(axes,
+                    mon=runner.mon, pre_stimulus_period=pre_stimulus_period,
                     stimulus_period=stimulus_period, delay_period=delay_period)
   plt.show()
 

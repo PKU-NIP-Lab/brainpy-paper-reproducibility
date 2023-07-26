@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
+import time
 
 import brainpy as bp
 import brainpy.math as bm
-import brainpylib as bl
-
-assert bp.__version__ > '2.2.0'
+import numpy as np
 
 taum = 20
 taue = 5
@@ -16,10 +15,12 @@ Erev_exc = 0.
 Erev_inh = -80.
 Ib = 20.
 ref = 5.0
+we = 0.6  # excitatory synaptic weight (voltage)
+wi = 6.7  # inhibitory synaptic weight
 
 
-class LIF(bp.NeuGroup):
-  def __init__(self, size, **kwargs):
+class LIF(bp.dyn.NeuDyn):
+  def __init__(self, size, V_init: callable, **kwargs):
     super(LIF, self).__init__(size=size, **kwargs)
 
     # parameters
@@ -30,65 +31,63 @@ class LIF(bp.NeuGroup):
     self.tau_ref = ref
 
     # variables
-    self.V = bm.Variable(bm.zeros(self.num))
-    self.input = bm.Variable(bm.zeros(self.num))
+    self.V = bp.init.variable_(V_init, self.num)
     self.spike = bm.Variable(bm.zeros(self.num, dtype=bool))
     self.t_last_spike = bm.Variable(bm.ones(self.num) * -1e7)
 
-  def update(self, tdi):
-    refractory = (tdi.t - self.t_last_spike) <= self.tau_ref
-    V = self.V + (-self.V + self.V_rest + self.input) / self.tau * tdi.dt
+  def update(self, inp):
+    inp = self.sum_inputs(self.V.value, init=inp)  # sum all projection inputs
+    refractory = (bp.share['t'] - self.t_last_spike) <= self.tau_ref
+    V = self.V + (-self.V + self.V_rest + inp) / self.tau * bp.share['dt']
     V = bm.where(refractory, self.V, V)
     spike = self.V_th <= V
-    self.t_last_spike.value = bm.where(spike, tdi.t, self.t_last_spike)
+    self.t_last_spike.value = bm.where(spike, bp.share['t'], self.t_last_spike)
     self.V.value = bm.where(spike, self.V_reset, V)
     self.spike.value = spike
-    self.input[:] = Ib
+    return spike
 
 
-class ExpCOBA(bp.TwoEndConn):
-  def __init__(self, pre, post, conn, E, w, tau, **kwargs):
-    super(ExpCOBA, self).__init__(pre, post, conn=conn, **kwargs)
+class Exponential(bp.Projection):
+  def __init__(self, num_pre, post, prob, g_max, tau, E):
+    super().__init__()
 
-    # parameters
-    self.E = E
-    self.tau = tau
-    self.w = w
-    self.pre2post = self.conn.requires('pre2post')
+    self.proj = bp.dyn.ProjAlignPostMg1(
+      comm=bp.dnn.EventCSRLinear(bp.conn.FixedProb(prob, pre=num_pre, post=post.num), g_max),
+      syn=bp.dyn.Expon.desc(post.num, tau=tau),
+      out=bp.dyn.COBA.desc(E=E),
+      post=post
+    )
 
-    # variables
-    self.g = bm.Variable(bm.zeros(post.num))  # variables
+  def update(self, spk):
+    self.proj.update(spk)
 
-  def update(self, tdi):
-    # syn_vs = bm.pre2post_event_sum(self.pre.spike, self.pre2post, self.post.num, self.w)
-    syn_vs = bl.event_csr_matvec(self.w, self.pre2post[0], self.pre2post[1], self.pre.spike,
-                                 shape=(self.pre.num, self.post.num), transpose=True)
-    self.g.value = self.g - self.g / self.tau * tdi.dt + syn_vs
-    self.post.input += self.g * (self.E - self.post.V)
+
+class COBA(bp.DynSysGroup):
+  def __init__(self, scale):
+    super().__init__()
+    self.num_exc = int(3200 * scale)
+    self.num_inh = int(800 * scale)
+    self.N = LIF(self.num_exc + self.num_inh, V_init=bp.init.Normal(-55., 5.))
+    self.E = Exponential(self.num_exc, self.N, prob=80. / self.N.num, E=Erev_exc, g_max=we, tau=taue)
+    self.I = Exponential(self.num_inh, self.N, prob=80. / self.N.num, E=Erev_inh, g_max=wi, tau=taui)
+
+  def update(self, inp):
+    self.E(self.N.spike[:self.num_exc])
+    self.I(self.N.spike[self.num_exc:])
+    self.N(inp)
+    return self.N.spike.value
 
 
 def run1(scale=10, duration=1e3):
-  num_exc = int(3200 * scale)
-  num_inh = int(800 * scale)
-  we = 0.6 / scale  # excitatory synaptic weight (voltage)
-  wi = 6.7 / scale  # inhibitory synaptic weight
+  net = COBA(scale=scale)
+  indices = np.arange(int(duration/ bm.get_dt()))
 
-  E = LIF(num_exc)
-  I = LIF(num_inh)
-  E.V[:] = bm.random.randn(E.num) * 5. - 55.
-  I.V[:] = bm.random.randn(I.num) * 5. - 55.
-
-  # # synapses
-  E2E = ExpCOBA(E, E, bp.conn.FixedProb(0.02), E=Erev_exc, w=we, tau=taue)
-  E2I = ExpCOBA(E, I, bp.conn.FixedProb(0.02), E=Erev_exc, w=we, tau=taue)
-  I2E = ExpCOBA(I, E, bp.conn.FixedProb(0.02), E=Erev_inh, w=wi, tau=taui)
-  I2I = ExpCOBA(I, I, bp.conn.FixedProb(0.02), E=Erev_inh, w=wi, tau=taui)
+  t0 = time.time()
+  bm.for_loop(lambda i: net.step_run(i, Ib), indices, progress_bar=False)
+  t1 = time.time()
 
   # running
-  net = bp.Network(E2E, E2I, I2I, I2E, E=E, I=I)
-  runner = bp.DSRunner(net)
-  t = runner.run(duration, eval_time=True)[0]
-  print(f'size = {num_exc + num_inh}, running time = {t} s')
+  print(f'size = {net.N.num}, running time = {t1 - t0} s')
 
   # runner = bp.dyn.DSRunner(net, monitors=['E.spike'])
   # t = runner.run(duration)
@@ -96,6 +95,6 @@ def run1(scale=10, duration=1e3):
 
 
 if __name__ == '__main__':
-  run1(1, duration=2e2)
-  # for s in [1, 2, 4, 6, 8, 10]:
-  #   run1(s, duration=5e3)
+  # run1(1, duration=2e2)
+  for s in [1, 2, 4, 6, 8, 10]:
+    run1(s, duration=5e3)

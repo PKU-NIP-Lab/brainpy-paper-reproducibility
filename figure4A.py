@@ -9,12 +9,13 @@ Implementation of the paper:
 
 """
 
-import matplotlib.pyplot as plt
-import numpy as np
 import brainpy as bp
 import brainpy.math as bm
-from jax.lax import stop_gradient
+
+import numpy as np
+import matplotlib.pyplot as plt
 from matplotlib import patches
+from jax.lax import stop_gradient
 
 bm.set_dt(1.)  # Simulation time step [ms]
 
@@ -43,44 +44,35 @@ class EligSNN(bp.Network):
     self.num_out = num_out
     self.eprop = eprop
 
-    # neurons
-    self.i = bp.neurons.InputGroup(num_in)
-    self.o = bp.neurons.LeakyIntegrator(num_out, tau=20, mode=bm.training_mode)
+    # encoding: i2r
+    self.i2r = bp.dnn.Linear(num_in, num_rec, W_initializer=bp.init.KaimingNormal(), b_initializer=None)
+    self.i2r.W *= tau_v
 
+    # recurrent: r
     n_regular = int(num_rec / 2)
     n_adaptive = num_rec - n_regular
     beta1 = bm.exp(- bm.get_dt() / tau_a)
     beta2 = 1.7 * (1 - beta1) / (1 - bm.exp(-1 / tau_v))
     beta = bm.concatenate([bm.ones(n_regular), bm.ones(n_adaptive) * beta2])
     self.r = bp.neurons.ALIFBellec2020(
-      num_rec, V_rest=0., tau_ref=5., V_th=0.6,
-      tau_a=tau_a, tau=tau_v, beta=beta,
-      V_initializer=bp.init.ZeroInit(),
-      a_initializer=bp.init.ZeroInit(),
-      mode=bm.training_mode, eprop=eprop
+      num_rec, V_rest=0., tau_ref=5., V_th=0.6, input_var=False,
+      tau_a=tau_a, tau=tau_v, beta=beta, eprop=eprop,
+      V_initializer=bp.init.ZeroInit(), a_initializer=bp.init.ZeroInit(),
     )
 
-    # synapses
-    self.i2r = bp.layers.Dense(num_in, num_rec,
-                               W_initializer=bp.init.KaimingNormal(),
-                               b_initializer=None)
-    self.i2r.W *= tau_v
-    self.r2r = bp.layers.Dense(num_rec, num_rec,
-                               W_initializer=bp.init.KaimingNormal(),
-                               b_initializer=None)
+    # recurrent-to-recurrent
+    self.r2r = bp.dnn.Linear(num_rec, num_rec, W_initializer=bp.init.KaimingNormal(), b_initializer=None)
     self.r2r.W *= tau_v
-    self.r2o = bp.layers.Dense(num_rec, num_out,
-                               W_initializer=bp.init.KaimingNormal(),
-                               b_initializer=None)
 
-  def update(self, shared, x):
-    self.r.input += self.i2r(shared, x)
+    # recurrent-to-output
+    self.r2o = bp.dnn.Linear(num_rec, num_out, W_initializer=bp.init.KaimingNormal(), b_initializer=None)
+
+    # neurons
+    self.o = bp.dyn.Leaky(num_out, tau=20)
+
+  def update(self, x):
     z = stop_gradient(self.r.spike.value) if self.eprop else self.r.spike.value
-    self.r.input += self.r2r(shared, z)
-    self.r(shared)
-    self.o.input += self.r2o(shared, self.r.spike.value)
-    self.o(shared)
-    return self.o.V.value
+    return (self.i2r(x) + self.r2r(z)) >> self.r >> self.r2o >> self.o
 
 
 with bm.training_environment():
@@ -167,6 +159,72 @@ def loss_fun(predicts, targets):
   return loss, loss_res
 
 
+def visualize_results1(inputs, outputs, ts, spks, n_channel):
+  fig, gs = bp.visualize.get_figure(3, 1, 2., 6.)
+  ax_inp = fig.add_subplot(gs[0, 0])
+  ax_rec = fig.add_subplot(gs[1, 0])
+  ax_out = fig.add_subplot(gs[2, 0])
+  ax_inp.set_yticklabels([])
+  ax_inp.add_patch(patches.Rectangle((0, 2 * n_channel + 2 * int(n_channel / 2)),
+                                     inputs.shape[0], n_channel,
+                                     facecolor="red", alpha=0.1))
+  ax_inp.add_patch(patches.Rectangle((0, 3 * n_channel + 3 * int(n_channel / 2)),
+                                     inputs.shape[0], n_channel,
+                                     facecolor="blue", alpha=0.1))
+  bp.visualize.raster_plot(ts, inputs, ax=ax_inp, marker='|')
+  ax_inp.set_ylabel('Input Activity')
+  ax_inp.set_xticklabels([])
+  ax_inp.set_xticks([])
+
+  # spiking activity
+  bp.visualize.raster_plot(ts, spks, ax=ax_rec, marker='|')
+  ax_rec.set_ylabel('Spiking Activity')
+  ax_rec.set_xticklabels([])
+  ax_rec.set_xticks([])
+  # decision activity
+  ax_out.set_yticks([0, 0.5, 1])
+  ax_out.set_ylabel('Output Activity')
+  ax_out.plot(ts, outputs[:, 0], label='Readout 0', alpha=0.7)
+  ax_out.plot(ts, outputs[:, 1], label='Readout 1', alpha=0.7)
+  ax_out.set_xticklabels([])
+  ax_out.set_xticks([])
+  ax_out.set_xlabel('Time [ms]')
+  plt.legend()
+  plt.show()
+
+
+def visualize_results2(outputs, spikes, ts, save_fn=None):
+  plt.rcParams.update({"font.size": 15})
+  fig, gs = bp.visualize.get_figure(2, 1, 2.25, 6)
+
+  ax1 = fig.add_subplot(gs[0, 0])
+  ax1.spines['top'].set_visible(False)
+  ax1.spines['right'].set_visible(False)
+  elements = np.where(spikes > 0.)
+  index = elements[1]
+  time = ts[elements[0]]
+  ax1.plot(time, index, '|', markersize=2)
+  ax1.set_ylabel('Spiking Activity')
+  ax1.set_xticklabels([])
+  ax1.set_xticks([])
+  plt.title('Spiking Neural Network')
+
+  ax = fig.add_subplot(gs[1, 0])
+  ax.spines['top'].set_visible(False)
+  ax.spines['right'].set_visible(False)
+  ax.plot([0, ts[-1]], [0.5, 0.5], linestyle='--', color='gray')
+  outputs = bm.as_numpy(bm.softmax(outputs, axis=1))
+  ax.plot(ts, outputs[:, 0], color='tab:pink')
+  ax.set_ylabel('Output Activity')
+  ax.set_xticks([])
+  ax.set_xlabel('Time [ms]')
+
+  fig.align_ylabels([ax1, ax])
+  if save_fn:
+    plt.savefig(save_fn, transparent=True, dpi=1000)
+  plt.show()
+
+
 # Training
 trainer = bp.BPTT(
   net,
@@ -185,44 +243,16 @@ runner = bp.DSTrainer(net, monitors={'spike': net.r.spike})
 outs = runner.predict(dataset, reset_state=True)
 
 for i in range(10):
-  fig, gs = bp.visualize.get_figure(3, 1, 2., 6.)
-  ax_inp = fig.add_subplot(gs[0, 0])
-  ax_rec = fig.add_subplot(gs[1, 0])
-  ax_out = fig.add_subplot(gs[2, 0])
-
   data = dataset[i]
-  # insert empty row
   n_channel = data.shape[1] // 4
   zero_fill = np.zeros((data.shape[0], int(n_channel / 2)))
   data = np.concatenate((data[:, 3 * n_channel:], zero_fill,
                          data[:, 2 * n_channel:3 * n_channel], zero_fill,
                          data[:, :n_channel], zero_fill,
                          data[:, n_channel:2 * n_channel]), axis=1)
-  ax_inp.set_yticklabels([])
-  ax_inp.add_patch(patches.Rectangle((0, 2 * n_channel + 2 * int(n_channel / 2)),
-                                     data.shape[0], n_channel,
-                                     facecolor="red", alpha=0.1))
-  ax_inp.add_patch(patches.Rectangle((0, 3 * n_channel + 3 * int(n_channel / 2)),
-                                     data.shape[0], n_channel,
-                                     facecolor="blue", alpha=0.1))
-  bp.visualize.raster_plot(runner.mon.ts, data, ax=ax_inp, marker='|')
-  ax_inp.set_ylabel('Input Activity')
-  ax_inp.set_xticklabels([])
-  ax_inp.set_xticks([])
+  visualize_results1(data, outs[i], runner.mon['ts'], runner.mon['spike'][i], n_channel)
 
-  # spiking activity
-  bp.visualize.raster_plot(runner.mon.ts, runner.mon['spike'][i], ax=ax_rec, marker='|')
-  ax_rec.set_ylabel('Spiking Activity')
-  ax_rec.set_xticklabels([])
-  ax_rec.set_xticks([])
-  # decision activity
-  ax_out.set_yticks([0, 0.5, 1])
-  ax_out.set_ylabel('Output Activity')
-  ax_out.plot(runner.mon.ts, outs[i, :, 0], label='Readout 0', alpha=0.7)
-  ax_out.plot(runner.mon.ts, outs[i, :, 1], label='Readout 1', alpha=0.7)
-  ax_out.set_xticklabels([])
-  ax_out.set_xticks([])
-  ax_out.set_xlabel('Time [ms]')
-  plt.legend()
-  plt.show()
-
+for i in range(10):
+  visualize_results2(outs[i], runner.mon['spike'][i, 60:], runner.mon['ts'],
+                     save_fn=f'fig-{i}.pdf')
+  plt.close()

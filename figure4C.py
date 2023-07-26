@@ -74,7 +74,7 @@ def plot_lorenz(x, y, true_z, predict_z, linewidth=None):
   ax3.spines['right'].set_color('none')
   ax3.spines['top'].set_color('none')
 
-  # plt.savefig(f'Reservoir-training.png', dpi=1000, transparent=True)
+  # plt.savefig(f'reservoir-lorenz-training.pdf', dpi=1000, transparent=True)
   plt.show()
 
 
@@ -105,8 +105,8 @@ class NGRC(bp.DynamicalSystem):
     self.r = bp.layers.NVAR(num_in, delay=4, order=2, stride=5)
     self.o = bp.layers.Dense(self.r.num_out, 1, mode=bm.training_mode)
 
-  def update(self, sha, x):
-    return self.o(sha, self.r(sha, x))
+  def update(self, x):
+    return self.o(self.r(x))
 
 
 with bm.batching_environment():

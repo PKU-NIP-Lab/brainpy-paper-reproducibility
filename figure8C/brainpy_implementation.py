@@ -13,13 +13,10 @@ def build_and_run(scale, file=None,
                   stimulus_period=1000.,
                   delay_period=500.,
                   progress_bar=False):
-    net = DecisionMakingNet(scale=scale,
-                            pre_stimulus_period=pre_stimulus_period,
-                            stimulus_period=stimulus_period)
+    net = DecisionMakingNet(scale=scale, pre_stimulus_period=pre_stimulus_period, stimulus_period=stimulus_period)
 
     runner = bp.DSRunner(net,
                          # monitors=['A.spike', 'B.spike', 'IA.freq', 'IB.freq'],
-                         dyn_vars=net.vars(),
                          progress_bar=progress_bar)
     total_period = pre_stimulus_period + stimulus_period + delay_period
     t = runner(total_period, eval_time=True)[0]

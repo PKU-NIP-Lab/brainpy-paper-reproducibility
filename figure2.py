@@ -2,24 +2,14 @@
 
 import brainpy as bp
 import brainpy.math as bm
-import numpy as np
 from brainpy.connect import FixedProb
-from brainpy.channels import INa_TM1991, IL
-from brainpy.synapses import Exponential
-from brainpy.synouts import COBA
-
-comp_method = 'sparse'
-area_names = ['V1', 'V2', 'V4', 'TEO', 'TEpd']
-data = np.load('./data/visual_conn.npz')
-conn_data = data['conn']
-delay_data = (data['delay'] / bm.get_dt()).astype(int)
-num_exc = 3200
-num_inh = 800
 
 
-class IK(bp.Channel):
-  def __init__(self, size, E=-90., g_max=10., phi=1., V_sh=-50., method='exp_euler'):
-    super(IK, self).__init__(size)
+class IK(bp.dyn.IonChannel):
+  master_type = bp.dyn.HHTypedNeuron
+
+  def __init__(self, size, E=-90., g_max=10., phi=1., V_sh=-50., method='exp_auto'):
+    super().__init__(size)
     self.g_max, self.E, self.V_sh, self.phi = g_max, E, V_sh, phi
     self.p = bm.Variable(bm.zeros(size))
     self.integral = bp.odeint(self.dp, method=method)
@@ -30,76 +20,90 @@ class IK(bp.Channel):
     beta = 0.5 * bm.exp(-(V - self.V_sh - 10.) / 40.)
     return self.phi * (alpha * (1. - p) - beta * p)
 
-  def update(self, tdi, V):
-    self.p.value = self.integral(self.p, tdi.t, V, dt=tdi.dt)
+  def update(self, V):
+    self.p.value = self.integral(self.p, bp.share['t'], V)
 
   def current(self, V):
     return self.g_max * self.p ** 4 * (self.E - V)
 
 
-class HH(bp.CondNeuGroup):
+class HH(bp.dyn.CondNeuGroupLTC):
   def __init__(self, size, V_initializer=bp.init.Uniform(-70, -50.), method='exp_auto'):
-    super(HH, self).__init__(size, V_initializer=V_initializer)
+    super().__init__(size, V_initializer=V_initializer)
     self.IK = IK(size, g_max=30., V_sh=-63., method=method)
-    self.INa = INa_TM1991(size, g_max=100., V_sh=-63., method=method)
-    self.IL = IL(size, E=-60., g_max=0.05)
+    self.INa = bp.dyn.INa_TM1991(size, g_max=100., V_sh=-63., method=method)
+    self.IL = bp.dyn.IL(size, E=-60., g_max=0.05)
 
 
-class Network(bp.Network):
+class EINet(bp.Network, bp.mixin.ReceiveInputProj):
   def __init__(self, num_E, num_I, gEE=0.03, gEI=0.03, gIE=0.335, gII=0.335):
-    super(Network, self).__init__()
+    super().__init__()
     self.E, self.I = HH(num_E), HH(num_I)
-    self.E2E = Exponential(self.E, self.E, FixedProb(0.02),
-                           g_max=gEE,
-                           tau=5,
-                           output=COBA(E=0.),
-                           comp_method=comp_method)
-    self.E2I = Exponential(self.E, self.I, FixedProb(0.02),
-                           g_max=gEI,
-                           tau=5.,
-                           output=COBA(E=0.),
-                           comp_method=comp_method)
-    self.I2E = Exponential(self.I, self.E, FixedProb(0.02),
-                           g_max=gIE,
-                           tau=10.,
-                           output=COBA(E=-80),
-                           comp_method=comp_method)
-    self.I2I = Exponential(self.I, self.I, FixedProb(0.02),
-                           g_max=gII,
-                           tau=10.,
-                           output=COBA(E=-80.),
-                           comp_method=comp_method)
+    self.E2E = bp.dyn.ProjAlignPostMg2(
+      pre=self.E,
+      delay=None,
+      comm=bp.dnn.EventCSRLinear(FixedProb(0.02, pre=num_E, post=num_E), gEE),
+      syn=bp.dyn.Expon.desc(num_E, tau=5.),
+      out=bp.dyn.COBA.desc(E=0.),
+      post=self.E
+    )
+    self.E2I = bp.dyn.ProjAlignPostMg2(
+      self.E,
+      None,
+      bp.dnn.EventCSRLinear(FixedProb(0.02, pre=num_E, post=num_I), gEI),
+      bp.dyn.Expon.desc(num_I, tau=5.),
+      bp.dyn.COBA.desc(E=0.),
+      self.I
+    )
+    self.I2E = bp.dyn.ProjAlignPostMg2(
+      self.I,
+      None,
+      bp.dnn.EventCSRLinear(FixedProb(0.02, pre=num_I, post=num_E), gIE),
+      bp.dyn.Expon.desc(num_E, tau=10.),
+      bp.dyn.COBA.desc(E=-80.),
+      self.E
+    )
+    self.I2I = bp.dyn.ProjAlignPostMg2(
+      self.I,
+      None,
+      bp.dnn.EventCSRLinear(FixedProb(0.02, pre=num_I, post=num_I), gII),
+      bp.dyn.Expon.desc(num_I, tau=10.),
+      bp.dyn.COBA.desc(E=-80.),
+      self.I
+    )
 
 
-class Projection(bp.DynamicalSystem):
-  def __init__(self, pre, post, delay, conn, gEE=0.03, gEI=0.03, tau=5.):
-    super(Projection, self).__init__()
-    self.E2E = Exponential(pre.E, post.E, bp.conn.FixedProb(0.02),
-                           delay_step=delay,
-                           g_max=gEE * conn,
-                           tau=tau,
-                           output=COBA(0.),
-                           comp_method=comp_method)
-    self.E2I = Exponential(pre.E, post.I, bp.conn.FixedProb(0.02),
-                           delay_step=delay,
-                           g_max=gEI * conn,
-                           tau=tau,
-                           output=COBA(0.),
-                           comp_method=comp_method)
 
-  def update(self, tdi):
-    self.E2E.update(tdi)
-    self.E2I.update(tdi)
+class Projection(bp.DynSysGroup):
+  def __init__(self, pre: EINet, post: EINet, delay, conn, gEE=0.03, gEI=0.03, tau=5.):
+    super().__init__()
+    self.E2E = bp.dyn.ProjAlignPostMg2(
+      pre=pre.E,
+      delay=delay * bm.get_dt(),
+      comm=bp.dnn.EventCSRLinear(FixedProb(0.02, pre=pre.E.num, post=post.E.num), gEE * conn),
+      syn=bp.dyn.Expon.desc(post.E.num, tau=tau),
+      out=bp.dyn.COBA.desc(E=0.),
+      post=post.E,
+    )
+    self.E2I = bp.dyn.ProjAlignPostMg2(
+      pre=pre.E,
+      delay=delay * bm.get_dt(),
+      comm=bp.dnn.EventCSRLinear(FixedProb(0.02, pre=pre.E.num, post=post.I.num), gEI * conn),
+      syn=bp.dyn.Expon.desc(post.I.num, tau=tau),
+      out=bp.dyn.COBA.desc(E=-80.),
+      post=post.I,
+    )
 
 
-class System(bp.Network):
-  def __init__(self, conn, delay, gEE=0.03, gEI=0.03, gIE=0.335, gII=0.335):
-    super(System, self).__init__()
-
+class VisualSystem(bp.DynSysGroup):
+  def __init__(self, ne, ni, conn, delay, gEE=0.03, gEI=0.03, gIE=0.335, gII=0.335):
+    super().__init__()
     num_area = conn.shape[0]
-    self.areas = [Network(num_exc, num_inh, gEE=gEE, gEI=gEI, gII=gII, gIE=gIE)
-                  for _ in range(num_area)]
-    self.projections = []
+
+    areas = [EINet(ne, ni, gEE=gEE, gEI=gEI, gII=gII, gIE=gIE)
+             for _ in range(num_area)]
+    self.areas = bm.node_list(areas)
+    self.projections = bm.node_list()
     for i in range(num_area):
       for j in range(num_area):
         if i != j:
@@ -110,5 +114,3 @@ class System(bp.Network):
                             gEE=gEE,
                             gEI=gEI)
           self.projections.append(proj)
-    self.register_implicit_nodes(self.projections, self.areas)
-

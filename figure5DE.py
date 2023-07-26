@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 
-class CANN1D(bp.NeuGroup):
+class CANN1D(bp.dyn.NeuDyn):
   def __init__(self, num, tau=1., k=8.1, a=0.5, A=10., J0=4.,
                z_min=-bm.pi, z_max=bm.pi, **kwargs):
     super(CANN1D, self).__init__(size=num, **kwargs)
@@ -60,8 +60,9 @@ class CANN1D(bp.NeuGroup):
   def get_stimulus_by_pos(self, pos):
     return self.A * bm.exp(-0.25 * bm.square(self.dist(self.x - pos) / self.a))
 
-  def update(self, tdi):
-    t, dt = tdi.get('t'), tdi.get('dt')
+  def update(self):
+    t = bp.share['t']
+    dt = bp.share['dt']
     self.u.value = self.integral(self.u, t, self.input, dt)
     self.input[:] = 0.
 

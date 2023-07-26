@@ -6,8 +6,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 from jax import vmap
 
-from figure2 import HH, Network, System, area_names, num_exc, num_inh, conn_data, delay_data
+from figure2 import HH, EINet, VisualSystem
 from src.decision_making_network import DecisionMakingNet
+
+comp_method = 'sparse'
+area_names = ['V1', 'V2', 'V4', 'TEO', 'TEpd']
+data = np.load('./data/visual_conn.npz')
+conn_data = data['conn']
+delay_data = (data['delay'] / bm.get_dt()).astype(int)
+num_exc = 3200
+num_inh = 800
 
 
 def a1_a2_visualize_channel_and_neuron():
@@ -39,7 +47,7 @@ def a1_a2_visualize_channel_and_neuron():
 
 def a3_visualize_network(seed=20873, gEE=0.03, gEI=0.03, gIE=.335, gII=0.335, ):
   bm.random.seed(seed)
-  model = Network(num_exc, num_inh, gEE=gEE, gEI=gEI, gIE=gIE, gII=gII)
+  model = EINet(num_exc, num_inh, gEE=gEE, gEI=gEI, gIE=gIE, gII=gII)
   runner = bp.DSRunner(model, monitors={'exc.spike': model.E.spike})
   runner.run(200.)
 
@@ -71,18 +79,18 @@ def a4_visualize_system():
   gII = 0.26800
 
   bm.random.seed(seed)
-  model = System(conn=gc * bm.asarray(conn_data),
-                 delay=bm.asarray(delay_data),
-                 gEE=gEE, gEI=gEI,
-                 gIE=gIE, gII=gII)
+  model = VisualSystem(num_exc,
+                       num_inh,
+                       conn=gc * bm.asarray(conn_data),
+                       delay=bm.asarray(delay_data),
+                       gEE=gEE, gEI=gEI,
+                       gIE=gIE, gII=gII)
   inputs, duration = bp.inputs.section_input([0., 1., 0.],
                                              [400., 100., 300.],
                                              return_length=True)
   runner = bp.DSRunner(
     model,
-    monitors={
-      'exc.spike': lambda tdi: bm.concatenate([area.E.spike for area in model.areas]),
-    },
+    monitors={'exc.spike': lambda: bm.concatenate([area.E.spike for area in model.areas])},
     inputs=[model.areas[0].E.input, inputs, 'iter'],
   )
   runner.run(duration)
@@ -186,7 +194,7 @@ def a5_decision_making_batch_simulation():
 
 
 if __name__ == '__main__':
-  a1_a2_visualize_channel_and_neuron()
+  # a1_a2_visualize_channel_and_neuron()
   a3_visualize_network()
   a4_visualize_system()
   a5_decision_making_batch_simulation()

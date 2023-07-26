@@ -76,7 +76,6 @@ class EI_RNN(bp.DynamicalSystem):
   def readout(self, h):
     return h @ self.w_ro + self.b_ro
 
-  @bp.not_pass_shargs
   def update(self, x):
     self.h.value = self.cell(x, self.h)
     self.o.value = self.readout(self.h[:, :self.e_size])
@@ -108,14 +107,13 @@ opt = bp.optim.Adam(lr=0.001, train_vars=net.train_vars().unique())
 
 # gradient function
 grad_f = bm.grad(net.loss,
-                 child_objs=net,
                  grad_vars=net.train_vars().unique(),
                  return_value=True,
                  has_aux=True)
 
 
 # training function
-@bm.jit(child_objs=(net, opt))
+@bm.jit
 def train(xs, ys):
   grads, loss, acc = grad_f(xs, ys)
   opt.update(grads)
@@ -149,11 +147,18 @@ print('Average performance', np.mean(correct))
 
 # plot activity
 trial = 0
-plt.figure(figsize=(8, 6))
+plt.rcParams.update({"font.size": 15})
+fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6)
+ax = fig.add_subplot(gs[0, 0])
 _ = plt.plot(rnn_activity[:, trial, :net.e_size], color='blue', label='Excitatory')
 _ = plt.plot(rnn_activity[:, trial, net.e_size:], color='red', label='Inhibitory')
-plt.xlabel('Time step')
-plt.ylabel('Activity')
+plt.xlabel('Time Step')
+plt.ylabel('Recurrent Activity')
+plt.title('Recurrent Neural Network')
+plt.xticks([])
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+plt.savefig('rate-rnn.pdf', transparent=True, dpi=1000)
 plt.show()
 
 
