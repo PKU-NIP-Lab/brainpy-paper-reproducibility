@@ -10,10 +10,23 @@ import numpy.random as rnd
 from brian2 import NeuronGroup, Synapses, PoissonInput, PoissonGroup, network_operation
 from brian2.monitors import StateMonitor, SpikeMonitor, PopulationRateMonitor
 
-try:
-  b2.clear_cache('cython')
-except:
-  pass
+run_on = 'genn'
+
+if run_on == 'cpp_standalone':
+  b2.set_device('cpp_standalone')
+
+elif run_on == 'genn':
+  import brian2genn
+
+  b2.set_device("genn")
+
+elif run_on == 'cuda':
+  import brian2cuda
+
+  b2.set_device("cuda_standalone")
+
+else:
+  raise ValueError
 
 b2.defaultclock.dt = 0.10 * b2.ms
 method = 'euler'
@@ -154,6 +167,7 @@ def sim_decision_making_network(
   excit_pop_B.v = rnd.uniform(E_leak_excit / b2.mV,
                               high=E_leak_excit / b2.mV + 5.,
                               size=excit_pop_B.N) * b2.mV
+
   # Z: non-sensitive
   excit_pop_Z = NeuronGroup(N_Group_Z,
                             model=excit_lif_dynamics,
@@ -197,21 +211,25 @@ def sim_decision_making_network(
                              on_pre="s_GABA += 1.0",
                              delay=0.5 * b2.ms)
   syn_inhib2inhib.connect(p=1.)
+
   syn_inhib2A = Synapses(inhib_pop,
                          target=excit_pop_A,
                          on_pre="s_GABA += 1.0",
                          delay=0.5 * b2.ms)
   syn_inhib2A.connect(p=1.)
+
   syn_inhib2B = Synapses(inhib_pop,
                          target=excit_pop_B,
                          on_pre="s_GABA += 1.0",
                          delay=0.5 * b2.ms)
   syn_inhib2B.connect(p=1.)
+
   syn_inhib2Z = Synapses(inhib_pop,
                          target=excit_pop_Z,
                          on_pre="s_GABA += 1.0",
                          delay=0.5 * b2.ms)
   syn_inhib2Z.connect(p=1.)
+
   ###############################################################################################
 
   # AMPA projections FROM EXCITATORY A: #########################################################
@@ -291,10 +309,10 @@ def sim_decision_making_network(
     sum_sNMDA_B = sum(excit_pop_B.s_NMDA)
     sum_sNMDA_Z = sum(excit_pop_Z.s_NMDA)
     # note the _ at the end of s_NMDA_total_ disables unit checking
-    inhib_pop.s_NMDA_total_ = (1.0 * sum_sNMDA_A + 1.0 * sum_sNMDA_B + 1.0 * sum_sNMDA_Z)
+    inhib_pop.s_NMDA_total_ = (sum_sNMDA_A + sum_sNMDA_B + sum_sNMDA_Z)
     excit_pop_A.s_NMDA_total_ = (w_pos * sum_sNMDA_A + w_neg * sum_sNMDA_B + w_neg * sum_sNMDA_Z)
     excit_pop_B.s_NMDA_total_ = (w_neg * sum_sNMDA_A + w_pos * sum_sNMDA_B + w_neg * sum_sNMDA_Z)
-    excit_pop_Z.s_NMDA_total_ = (1.0 * sum_sNMDA_A + 1.0 * sum_sNMDA_B + 1.0 * sum_sNMDA_Z)
+    excit_pop_Z.s_NMDA_total_ = (sum_sNMDA_A + sum_sNMDA_B + sum_sNMDA_Z)
 
   # set a self-recurrent synapse to introduce a delay when updating the intermediate
   # gating variable x
@@ -402,7 +420,6 @@ def sim_decision_making_network(
   if file is not None:
     file.write(f'scale={scale}, num={N_Excit + N_Inhib}, time={t}\n')
   print(f'Used time: {t} s')
-
 
   return ret_vals
 

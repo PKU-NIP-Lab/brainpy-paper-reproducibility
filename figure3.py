@@ -13,7 +13,7 @@ comp_method = 'sparse'
 area_names = ['V1', 'V2', 'V4', 'TEO', 'TEpd']
 data = np.load('./data/visual_conn.npz')
 conn_data = data['conn']
-delay_data = (data['delay'] / bm.get_dt()).astype(int)
+delay_data = data['delay']
 num_exc = 3200
 num_inh = 800
 
@@ -42,7 +42,7 @@ def a1_a2_visualize_channel_and_neuron():
   plt.xlim(0., 500.)
   lg = plt.legend(loc='right')
   lg.get_frame().set_alpha(0.5)
-  plt.show()
+  # plt.show()
 
 
 def a3_visualize_network(seed=20873, gEE=0.03, gEI=0.03, gIE=.335, gII=0.335, ):
@@ -70,21 +70,19 @@ def a3_visualize_network(seed=20873, gEE=0.03, gEI=0.03, gIE=.335, gII=0.335, ):
 
 
 def a4_visualize_system():
-  seed = 2546234
-
-  gc = 1.
   gEE = 0.0060
   gEI = 0.0060
   gIE = 0.26800
   gII = 0.26800
 
-  bm.random.seed(seed)
   model = VisualSystem(num_exc,
                        num_inh,
-                       conn=gc * bm.asarray(conn_data),
+                       conn=bm.asarray(conn_data),
                        delay=bm.asarray(delay_data),
-                       gEE=gEE, gEI=gEI,
-                       gIE=gIE, gII=gII)
+                       gEE=gEE,
+                       gEI=gEI,
+                       gIE=gIE,
+                       gII=gII)
   inputs, duration = bp.inputs.section_input([0., 1., 0.],
                                              [400., 100., 300.],
                                              return_length=True)
@@ -194,7 +192,7 @@ def a5_decision_making_batch_simulation():
 
 
 if __name__ == '__main__':
-  # a1_a2_visualize_channel_and_neuron()
-  a3_visualize_network()
-  a4_visualize_system()
-  a5_decision_making_batch_simulation()
+  a1_a2_visualize_channel_and_neuron()
+  # a3_visualize_network()
+  # a4_visualize_system()
+  # a5_decision_making_batch_simulation()

@@ -84,10 +84,8 @@ class NMDA(bp.Projection):
 
 
 class DecisionMakingNet(bp.DynSysGroup):
-  def __init__(
-      self, scale=1., mu0=40., coherence=25.6, f=0.15,
-      pre_stimulus_period=100., stimulus_period=1000., delay_period=500.
-  ):
+  def __init__(self, scale=1., mu0=40., coherence=25.6, f=0.15,
+               pre_stimulus_period=100., stimulus_period=1000., delay_period=500.):
     super().__init__()
 
     num_exc = int(1600 * scale)
@@ -136,7 +134,6 @@ class DecisionMakingNet(bp.DynSysGroup):
     self.IB2B = Exponential(IB, B, bp.conn.One2One(), delay=None, g_max=g_ext2E_AMPA, tau=2., E=0.)
 
     # define E->E/I conn
-
     self.N2B_AMPA = Exponential(N, B, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA * w_neg, tau=2., E=0.)
     self.N2A_AMPA = Exponential(N, A, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA * w_neg, tau=2., E=0.)
     self.N2N_AMPA = Exponential(N, N, bp.conn.All2All(), delay=0.5, g_max=g_E2E_AMPA, tau=2., E=0.)
