@@ -23,18 +23,18 @@ def read_fn_v1(fn, xs, filter=None):
 def read_fn_v2(fn, xs, filter=None):
   with open(os.path.join('speed_results/', fn), 'r') as fin:
     rs = json.load(fin)
-  return [np.mean(rs[str(x)]['exetime']) for x in xs]
+  return [(np.mean(rs[str(x)]['exetime'])  if (str(x) in rs) else np.nan) for x in xs]
 
 
-xs = [4000 * i for i in [1, 2, 4, 6, 8, 10]]
+xs = [4000 * i for i in [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]]
 
-platform = 'cpu'
+platform = 'gpu'
 
 if platform == 'cpu':
   files = ['neuron', 'nest', 'brian2cuda', 'genn', 'brian2', 'brainpy-gpu', 'brainpy-cpu']
-  files = ['neuron', 'nest', 'brian2', 'brainpy-cpu']
+  files = ['neuron', 'nest', 'brian2', 'brainpy-cpu', 'TPUv3x8']
 elif platform == 'gpu':
-  files = ['brian2cuda', 'genn', 'brainpy-gpu']
+  files = ['brian2cuda', 'genn', 'brainpy-gpu',]
 else:
   raise ValueError
 sns.set(font_scale=1.5)
@@ -58,9 +58,11 @@ if 'brainpy-cpu' in files:
 
 if 'brainpy-gpu' in files:
   res = read_fn_v2('brainpy-COBA-A6000-gpu-x32.json', xs=xs)
+  res = read_fn_v2('brainpy-COBA-gpu-x32.json', xs=xs)
   # plt.semilogy(xs, res, linestyle="--", marker='D', label='BrainPy GPU x32', linewidth=3, markersize=10)
   plt.plot(xs, res, linestyle="--", marker='D', label='BrainPy GPU x32', linewidth=3, markersize=10)
   res = read_fn_v2('brainpy-COBA-A6000-gpu-x64.json', xs=xs)
+  res = read_fn_v2('brainpy-COBA-gpu-x64.json', xs=xs)
   # plt.semilogy(xs, res, linestyle="--", marker='D', label='BrainPy GPU x64', linewidth=3, markersize=10)
   plt.plot(xs, res, linestyle="--", marker='D', label='BrainPy GPU x64', linewidth=3, markersize=10)
 
@@ -69,16 +71,24 @@ if 'brian2' in files:
   plt.semilogy(xs, res, linestyle="--", marker='v', label='Brian2', linewidth=3, markersize=10)
 
 if 'genn' in files:
-  res = read_fn_v2('brian2-COBA-A6000-genn.json', xs=xs)
+  # res = read_fn_v2('brian2-COBA-A6000-genn.json', xs=xs)
+  res = read_fn_v2('brian2-COBA-genn.json', xs=xs)
   # plt.semilogy(xs, res, linestyle="--", marker='x', label='GeNN', linewidth=3, markersize=10)
   plt.plot(xs, res, linestyle="--", marker='x', label='GeNN', linewidth=3, markersize=10)
 
 if 'brian2cuda' in files:
-  res = read_fn_v2('brian2-COBA-A6000-cuda_standalone.json', xs=xs)
+  # res = read_fn_v2('brian2-COBA-A6000-cuda_standalone.json', xs=xs)
+  res = read_fn_v2('brian2-COBA-cuda_standalone.json', xs=xs)
   # plt.semilogy(xs, res, linestyle="--", marker='*', label='Brian2CUDA', linewidth=3, markersize=10)
   plt.plot(xs, res, linestyle="--", marker='*', label='Brian2CUDA', linewidth=3, markersize=10)
 
-plt.xticks(xs)
+if 'TPUv3x8' in files:
+  res = read_fn_v2('brainpy-COBA-TPUx8-x32.json', xs=xs)
+  # plt.semilogy(xs, res, linestyle="--", marker='*', label='Brian2CUDA', linewidth=3, markersize=10)
+  plt.plot(xs, res, linestyle="--", marker='D', label='TPU v3', linewidth=3, markersize=10)
+
+
+# plt.xticks(xs)
 # plt.ylim(-1., 5.)
 
 # pytorch = read_fn('pytorch.json', xs=xs)

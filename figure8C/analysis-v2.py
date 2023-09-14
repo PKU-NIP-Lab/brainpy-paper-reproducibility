@@ -28,13 +28,15 @@ def read_fn_v2(fn, xs):
 
 platform = 'gpu'
 
+xs = [2000 * i for i in [1, 4, 8, 10, 20, 40, 60, 80, 100, 200, 400, 800, 1000]]
+xs = [2000 * i for i in [1,  40, 60, 80, 100, 200, 400, 800, 1000]]
 if platform == 'cpu':
-  xs = [4000 * i for i in [1, 2, 4, 6, 8, 10, 20]]
   files = ['neuron', 'nest', 'brian2cuda', 'genn', 'brian2', 'brainpy-gpu', 'brainpy-cpu']
   files = ['neuron', 'nest', 'brian2', 'brain2-th12', 'brainpy-cpu', 'TPUv3x8']
+  files = ['brainpy-cpu', ]
 elif platform == 'gpu':
-  xs = [4000 * i for i in [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]]
   files = ['brian2cuda', 'genn', 'brainpy-gpu']
+  files = ['brainpy-gpu', 'brainpy-tpu', ]
 else:
   raise ValueError
 
@@ -54,17 +56,17 @@ if 'nest' in files:
   plt.semilogy(xs, res, linestyle="--", marker='s', label='NEST', linewidth=3, markersize=10)
 
 if 'brainpy-cpu' in files:
-  res = read_fn_v2('speed_results/brainpy-COBAHH-cpu-x32-v2.json', xs=xs)
+  res = read_fn_v2(f'{prefix}/brainpy-DM-cpu-x32.json', xs=xs)
   plt.semilogy(xs, res, linestyle="--", marker='D', label='BrainPy CPU x32', linewidth=3, markersize=10)
-  res = read_fn_v2('speed_results/brainpy-COBAHH-cpu-x64-v2.json', xs=xs)
+  res = read_fn_v2(f'{prefix}/brainpy-DM-cpu-x64.json', xs=xs)
   plt.semilogy(xs, res, linestyle="--", marker='D', label='BrainPy CPU x64', linewidth=3, markersize=10)
 
 if 'brainpy-gpu' in files:
-  res = read_fn_v2(f'{prefix}/brainpy-COBAHH-gpu-x32.json', xs=xs)
+  res = read_fn_v2(f'{prefix}/brainpy-DM-gpu-x32.json', xs=xs)
   plt.plot(xs, res, linestyle="--", marker='D', label='BrainPy GPU x32', linewidth=3, markersize=10)
   # plt.semilogy(xs, res, linestyle="--", marker='D', label='BrainPy GPU x32', linewidth=3, markersize=10)
 
-  res = read_fn_v2(f'{prefix}/brainpy-COBAHH-gpu-x64.json', xs=xs)
+  res = read_fn_v2(f'{prefix}/brainpy-DM-gpu-x64.json', xs=xs)
   plt.plot(xs, res, linestyle="--", marker='D', label='BrainPy GPU x64', linewidth=3, markersize=10)
   # plt.semilogy(xs, res, linestyle="--", marker='D', label='BrainPy GPU x64', linewidth=3, markersize=10)
 
@@ -87,10 +89,10 @@ if 'brian2cuda' in files:
   plt.plot(xs, res, linestyle="--", marker='*', label='Brian2CUDA', linewidth=3, markersize=10)
 
 
-if 'TPUv3x8' in files:
-  res = read_fn_v2('speed_results_mon/brainpy-COBAHH-TPUx8-x32.json', xs=xs)
+if 'brainpy-tpu' in files:
+  res = read_fn_v2('speed_results_mon/brainpy-DM-tpu-x32.json', xs=xs)
   # plt.semilogy(xs, res, linestyle="--", marker='*', label='Brian2CUDA', linewidth=3, markersize=10)
-  plt.plot(xs, res, linestyle="--", marker='D', label='TPU v3', linewidth=3, markersize=10)
+  plt.plot(xs, res, linestyle="--", marker='D', label='TPU v3 x32', linewidth=3, markersize=10)
 
 # plt.xticks(xs)
 # plt.ylim(-1., 11.)
@@ -108,12 +110,15 @@ plt.ylabel('Simulation Time [s]')
 lg = plt.legend(fontsize=12, loc='best')
 # lg = plt.legend(fontsize=12, loc='upper right')
 lg.get_frame().set_alpha(0.3)
-plt.title(f'COBAHH {platform.upper()}')
-if platform == 'cpu':
-  plt.xlim(-1, 8.2e4)
-elif platform == 'gpu':
-  pass
+if platform == 'gpu':
+  plt.title(f'DMNet GPU & TPU')
+else:
+  plt.title(f'DMNet {platform.upper()}')
+# if platform == 'cpu':
+#   plt.xlim(-1, 8.2e4)
+# elif platform == 'gpu':
+#   pass
 plt.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-plt.savefig(f'COBAHH-speed-{platform}.pdf')
+plt.savefig(f'DM-speed-{platform}.pdf')
 plt.show()
 

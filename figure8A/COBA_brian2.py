@@ -69,27 +69,37 @@ def run_(scale=1., duration=1000., monitor=False):
   run(duration * ms)
   t2 = time.time()
   if monitor:
-    print(f'size = {num_exc + num_inh}, execution time = {device._last_run_time} s, running time = {t2 - t1} s, '
-          f'rate = {len(mon.i) / (num_exc + num_inh) / duration * 1e3} Hz')
+    rate = len(mon.i) / (num_exc + num_inh) / duration * 1e3
+    print(f'size = {num_exc + num_inh}, '
+          f'execution time = {device._last_run_time} s, '
+          f'running time = {t2 - t1} s, '
+          f'rate = {rate} Hz')
   else:
-    print(f'size = {num_exc + num_inh}, execution time = {device._last_run_time} s, running time = {t2 - t1} s')
+    rate = None
+    print(f'size = {num_exc + num_inh}, '
+          f'execution time = {device._last_run_time} s, '
+          f'running time = {t2 - t1} s')
   print()
   print()
 
-  return num_exc + num_inh, device._last_run_time, t2 - t1
+  return {'num': num_exc + num_inh,
+          'exe_time': device._last_run_time,
+          'run_time': t2 - t1,
+          'fr': rate}
 
 
 def benchmark(duration=1000.):
   final_results = dict()
-  # for scale in [1, 2, 4, 6, 8, 10]:
-  for scale in [20, 40, 60, 80, 100]:
+  for scale in [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]:
     for _ in range(10):
-      r = run_(scale=scale, duration=duration)
-      if r[0] not in final_results:
-        final_results[r[0]] = {'exetime': [], 'runtime': []}
-      final_results[r[0]]['exetime'].append(r[1])
-      final_results[r[0]]['runtime'].append(r[2])
-  with open(f'speed_results/brian2-COBA-{run_on}-thread{prefs.devices.cpp_standalone.openmp_threads}.json', 'w') as fout:
+      r = run_(scale=scale, duration=duration, monitor=False)
+      if r['num'] not in final_results:
+        final_results[r['num']] = {'exetime': [], 'runtime': [], 'firing_rate': []}
+      final_results[r['num']]['exetime'].append(r['exe_time'])
+      final_results[r['num']]['runtime'].append(r['run_time'])
+      final_results[r['num']]['firing_rate'].append(r['fr'])
+  # with open(f'speed_results/brian2-COBA-{run_on}-thread{prefs.devices.cpp_standalone.openmp_threads}.json', 'w') as fout:
+  with open(f'speed_results/brian2-COBA-{run_on}.json', 'w') as fout:
     json.dump(final_results, fout, indent=2)
 
 

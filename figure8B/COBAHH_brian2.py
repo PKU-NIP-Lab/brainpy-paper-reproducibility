@@ -92,17 +92,20 @@ def simulate(scale, duration, monitor=False):
   run(duration * ms)
   t1 = time.time()
   if monitor:
-    print(f'size = {num}, execution time = {device._last_run_time} s, running time = {t1 - t0} s, '
+    rate = len(mon.i) / num / duration * 1e3
+    print(f'size = {num}, '
+          f'execution time = {device._last_run_time} s, '
+          f'running time = {t1 - t0} s, '
           f'rate = {len(mon.i) / num / duration * 1e3} Hz')
-    # plot(mon.t / ms, mon.i, ',k')
-    # xlabel('Time (ms)')
-    # ylabel('Neuron index')
-    # show()
   else:
+    rate = -1e5
     print(f'size = {num}, execution time = {device._last_run_time} s, running time = {t1 - t0} s')
   print()
 
-  return num, device._last_run_time, t1 - t0
+  return {'num': num,
+          'exe_time': device._last_run_time,
+          'run_time': t1 - t0,
+          'fr': rate}
 
 
 def check_firing_rate():
@@ -116,15 +119,14 @@ def check_firing_rate():
 
 def benchmark(duration=1000.):
   final_results = dict()
-  # for scale in [1, 2, 4, 6, 8, 10]:
-  # for scale in [20, 40, 60, 80, 100]:
-  for scale in [20, 20]:
+  for scale in [1, 2, 4, 6, 8, 10, 20, 30, 40, 50]:
     for _ in range(10):
-      r = simulate(scale=scale, duration=duration)
-      if r[0] not in final_results:
-        final_results[r[0]] = {'exetime': [], 'runtime': []}
-      final_results[r[0]]['exetime'].append(r[1])
-      final_results[r[0]]['runtime'].append(r[2])
+      r = simulate(scale=scale, duration=duration, monitor=False)
+      if r['num'] not in final_results:
+        final_results[r['num']] = {'exetime': [], 'runtime': [], 'firing_rate': []}
+      final_results[r['num']]['exetime'].append(r['exe_time'])
+      final_results[r['num']]['runtime'].append(r['run_time'])
+      final_results[r['num']]['firing_rate'].append(r['fr'])
   name_ = run_on
   if len(sys.argv) > 2:
     name_ = run_on + f'-thread{prefs.devices.cpp_standalone.openmp_threads}'
@@ -133,5 +135,5 @@ def benchmark(duration=1000.):
 
 
 if __name__ == '__main__':
-  check_firing_rate()
-  # benchmark(duration=5e3)
+  # check_firing_rate()
+  benchmark(duration=5e3)
