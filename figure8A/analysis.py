@@ -28,11 +28,12 @@ def read_fn_v2(fn, xs, filter=None):
 
 xs = [4000 * i for i in [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]]
 
-platform = 'gpu'
+platform = 'cpu'
 
 if platform == 'cpu':
   files = ['neuron', 'nest', 'brian2cuda', 'genn', 'brian2', 'brainpy-gpu', 'brainpy-cpu']
   files = ['neuron', 'nest', 'brian2', 'brainpy-cpu', 'TPUv3x8']
+  files = ['neuron', 'nest', 'brian2', 'brainpy-cpu',]
 elif platform == 'gpu':
   files = ['brian2cuda', 'genn', 'brainpy-gpu',]
 else:
@@ -69,6 +70,8 @@ if 'brainpy-gpu' in files:
 if 'brian2' in files:
   res = read_fn_v2('brian2-COBA-wsl-cpp_standalone.json', xs=xs)
   plt.semilogy(xs, res, linestyle="--", marker='v', label='Brian2', linewidth=3, markersize=10)
+  res = read_fn_v2('brian2-COBA-cpp_standalone-thread12.json', xs=xs)
+  plt.semilogy(xs, res, linestyle="--", marker='v', label='Brian2 thread12', linewidth=3, markersize=10)
 
 if 'genn' in files:
   # res = read_fn_v2('brian2-COBA-A6000-genn.json', xs=xs)

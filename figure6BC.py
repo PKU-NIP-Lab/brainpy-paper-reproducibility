@@ -214,7 +214,6 @@ def visualize_coba_with_or_without_jit(num=5, device='cpu'):
 if __name__ == '__main__':
   pass
   # bm.set_platform('cpu')
-  # compare_with_or_without_jit(res_file='results/coba-dense-jit=False.json', jit=True, platform='cpu')
-  # visualize_coba_with_or_without_jit(12, device='gpu')
+  compare_with_or_without_jit(res_file='results/coba-dense-jit=False.json', jit=True, platform='cpu')
+  visualize_coba_with_or_without_jit(12, device='gpu')
   visualize_coba_with_or_without_jit(7, device='cpu')
-  # visualize_coba_with_or_without_event_op(device='cpu')

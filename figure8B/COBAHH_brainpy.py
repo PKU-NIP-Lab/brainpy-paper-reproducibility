@@ -7,6 +7,8 @@ import time
 import brainpy as bp
 import brainpy.math as bm
 import numpy as np
+import matplotlib.pyplot as plt
+
 
 bm.set_dt(0.1)
 
@@ -186,11 +188,33 @@ def benchmark(duration=1000., platform='cpu', x64=True):
     json.dump(final_results, fout, indent=2)
 
 
+def visualize_spike_raster(duration=100., x64=True, platform='cpu'):
+  bm.set_platform(platform)
+  if x64:
+    bm.enable_x64()
+  name = 'x64' if x64 else 'x32'
+  net = COBA_HH_Net(scale=1., monitor=True)
+  indices = np.arange(int(duration / bm.get_dt()))
+  r = bm.for_loop(net.step_run, indices, progress_bar=True)
+
+  fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
+  ax = fig.add_subplot(gs[0])
+  bp.visualize.raster_plot(indices * bm.get_dt(), r, ax=ax)
+  ax.spines['top'].set_visible(False)
+  ax.spines['right'].set_visible(False)
+  plt.title(f'BrainPy {platform.upper()} {name}')
+  plt.savefig(f'COBAHH-brainpy-{platform}-{name}.pdf')
+
+
+
+
+
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('-platform', default='cpu', help='platform')
   parser.add_argument('-x64', action='store_true')
   args = parser.parse_args()
 
+  # visualize_spike_raster(duration=100., platform=args.platform, x64=args.x64)
   benchmark(duration=5. * 1e3, platform=args.platform, x64=args.x64)
   # check_firing_rate(x64=args.x64, platform=args.platform)

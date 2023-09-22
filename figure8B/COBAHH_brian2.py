@@ -134,6 +134,44 @@ def benchmark(duration=1000.):
     json.dump(final_results, fout, indent=2)
 
 
+def visualize_spike_raster(scale, duration):
+  start_scope()
+  device.reinit()
+  device.activate()
+
+  num = int(4000 * scale)
+  P = NeuronGroup(num, model=eqs, threshold='v>-20', refractory='v>-20',
+                  method='exponential_euler')
+  Pe = P[:int(3200 * scale)]
+  Pi = P[int(3200 * scale):]
+  Ce = Synapses(Pe, P, on_pre='ge += we')
+  Ci = Synapses(Pi, P, on_pre='gi += wi')
+  Ce.connect(p=80 / num)
+  Ci.connect(p=80 / num)
+
+  # Initialization
+  P.v = 'El + (randn() * 5 - 5)'
+
+  mon = SpikeMonitor(P)
+
+  # Record a few traces
+  run(duration * ms)
+
+
+  import brainpy as bp
+  fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
+  ax = fig.add_subplot(gs[0])
+  plt.plot(mon.t / ms, mon.i, '.k', markersize=2,)
+  ax.spines['top'].set_visible(False)
+  ax.spines['right'].set_visible(False)
+  plt.title(f'Brian2 {run_on}')
+  plt.savefig(f'COBAHH-brian2-{run_on}.pdf')
+
+
+
 if __name__ == '__main__':
   # check_firing_rate()
-  benchmark(duration=5e3)
+  # benchmark(duration=5e3)
+
+  visualize_spike_raster(1., 100.)
+

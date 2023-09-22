@@ -6,6 +6,7 @@ import time
 import json
 import brainpy as bp
 import brainpy.math as bm
+import matplotlib.pyplot as plt
 import numpy as np
 
 taum = 20
@@ -54,17 +55,11 @@ class Exponential(bp.Projection):
   def __init__(self, num_pre, post, prob, g_max, tau, E):
     super().__init__()
     self.proj = bp.dyn.ProjAlignPostMg1(
-      comm=bp.dnn.EventCSRLinear(
-        bp.conn.FixedProb(prob, pre=num_pre, post=post.num, allow_multi_conn=True),
-        g_max
-      ),
+      comm=bp.dnn.EventCSRLinear(bp.conn.FixedProb(prob, pre=num_pre, post=post.num, allow_multi_conn=True), g_max),
       syn=bp.dyn.Expon.desc(post.num, tau=tau),
       out=bp.dyn.COBA.desc(E=E),
       post=post
     )
-
-  def update(self, spk):
-    self.proj.update(spk)
 
 
 class COBA(bp.DynSysGroup):
@@ -83,6 +78,25 @@ class COBA(bp.DynSysGroup):
     self.N(inp)
     if self.monitor:
       return self.N.spike.value
+
+
+def visualize_spike_raster(duration=100., x64=True, platform='cpu'):
+  bm.set_platform(platform)
+  if x64:
+    bm.enable_x64()
+  name = 'x64' if x64 else 'x32'
+  net = COBA(scale=1., monitor=True)
+  indices = np.arange(int(duration / bm.get_dt()))
+  r = bm.for_loop(net.step_run, indices, progress_bar=True)
+
+  fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
+  ax = fig.add_subplot(gs[0])
+  bp.visualize.raster_plot(indices * bm.get_dt(), r, ax=ax)
+  ax.spines['top'].set_visible(False)
+  ax.spines['right'].set_visible(False)
+  plt.title(f'BrainPy {platform.upper()} {name}')
+  plt.savefig(f'COBA-brainpy-{platform}-{name}.pdf')
+
 
 
 def run_a_simulation(scale=10, duration=1e3, platform='cpu', x64=True, monitor=False):
@@ -137,4 +151,8 @@ def benchmark(duration=1000., platform='cpu', x64=True):
 if __name__ == '__main__':
   x64 = False if sys.argv[1] == '0' else True
   benchmark(duration=5. * 1e3, platform='gpu', x64=x64)
+
   # check_firing_rate(platform='gpu')
+
+  # visualize_spike_raster(x64=False, platform='gpu')
+

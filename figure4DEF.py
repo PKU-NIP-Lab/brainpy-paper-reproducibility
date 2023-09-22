@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+from jax import core
 
 import brainpy as bp
 import brainpy.math as bm
@@ -41,8 +41,8 @@ def offline_training():
   bm.enable_x64()
 
   with bm.batching_environment():
-    model = bp.Sequential(bp.layers.Reservoir(3, 100),
-                          bp.layers.Dense(100, 3, mode=bm.training_mode))
+    model = bp.Sequential(bp.dyn.Reservoir(3, 100),
+                          bp.dnn.Dense(100, 3, mode=bm.training_mode))
   trainer = bp.OfflineTrainer(model, fit_method=bp.algorithms.RidgeRegression(alpha=1e-6))
 
   # fitting
@@ -51,18 +51,20 @@ def offline_training():
 
   # prediction
   predict = trainer.predict(X, reset_state=True)
-  predict1 = bm.as_numpy(predict)
+  predict = bm.as_numpy(predict)
+
+  print('MSE of offline training algorithm: ', bp.losses.mean_absolute_error(predict, Y))
 
   # visualization
-  visualize(predict1, method='Ridge Regression', save_fn='ridge.pdf')
+  visualize(predict, method='Ridge Regression', save_fn='ridge.pdf')
 
 
 def online_training():
   bm.enable_x64()
 
   with bm.batching_environment():
-    model = bp.Sequential(bp.layers.Reservoir(3, 100),
-                          bp.layers.Dense(100, 3, mode=bm.training_mode))
+    model = bp.Sequential(bp.dyn.Reservoir(3, 100),
+                          bp.dnn.Dense(100, 3, mode=bm.training_mode))
   trainer = bp.OnlineTrainer(model, fit_method=bp.algorithms.RLS())
 
   # fitting
@@ -71,18 +73,20 @@ def online_training():
 
   # prediction
   predict = trainer.predict(X, reset_state=True)
-  predict1 = bm.as_numpy(predict)
+  predict = bm.as_numpy(predict)
+
+  print('MSE of online training algorithm: ', bp.losses.mean_absolute_error(predict, Y))
 
   # visualization
-  visualize(predict1, method='FORCE learning', save_fn='force.pdf')
+  visualize(predict, method='FORCE learning', save_fn='force.pdf')
 
 
 def bp_training():
   bm.enable_x64()
 
   with bm.batching_environment():
-    reservoir = bp.layers.Reservoir(3, 100)
-    readout = bp.layers.Dense(100, 3, mode=bm.training_mode)
+    reservoir = bp.dyn.Reservoir(3, 100)
+    readout = bp.dnn.Dense(100, 3, mode=bm.training_mode)
 
   X, Y = get_data()
 
@@ -105,13 +109,15 @@ def bp_training():
   model = bp.Sequential(reservoir, readout, mode=bm.batching_mode)
   runner = bp.DSTrainer(model)
   predict = runner.predict(X, reset_state=True)
-  predict1 = bm.as_numpy(predict)
+  predict = bm.as_numpy(predict)
+
+  print('MSE of backpropagation algorithm: ', bp.losses.mean_absolute_error(predict, Y))
 
   # visualization
-  visualize(predict1, method='Backpropagation', save_fn='bp.pdf')
+  visualize(predict, method='Backpropagation', save_fn='bp.pdf')
 
 
 if __name__ == '__main__':
-  offline_training()
-  online_training()
+  # offline_training()
+  # online_training()
   bp_training()

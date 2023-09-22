@@ -94,6 +94,10 @@ if 'brainpy-tpu' in files:
   # plt.semilogy(xs, res, linestyle="--", marker='*', label='Brian2CUDA', linewidth=3, markersize=10)
   plt.plot(xs, res, linestyle="--", marker='D', label='TPU v3 x32', linewidth=3, markersize=10)
 
+  res = read_fn_v2('speed_results_mon/brainpy-DM-tpu-x64.json', xs=xs)
+  # plt.semilogy(xs, res, linestyle="--", marker='*', label='Brian2CUDA', linewidth=3, markersize=10)
+  plt.plot(xs, res, linestyle="--", marker='D', label='TPU v3 x64', linewidth=3, markersize=10)
+
 # plt.xticks(xs)
 # plt.ylim(-1., 11.)
 
@@ -114,10 +118,6 @@ if platform == 'gpu':
   plt.title(f'DMNet GPU & TPU')
 else:
   plt.title(f'DMNet {platform.upper()}')
-# if platform == 'cpu':
-#   plt.xlim(-1, 8.2e4)
-# elif platform == 'gpu':
-#   pass
 plt.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
 plt.savefig(f'DM-speed-{platform}.pdf')
 plt.show()

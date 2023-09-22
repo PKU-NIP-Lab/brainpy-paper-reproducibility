@@ -139,3 +139,12 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+/figure8A/output/
+/figure8A/speed_results/
+/figure8A/speed_results-mon/
+/figure8B/speed_results/
+/figure8B/speed_results_mon/
+/figure8B/speed_results_no_mon/
+/figure8B/speed_results_old/
+/figure8C/speed_results_mon/
+/figure8C/speed_results/
