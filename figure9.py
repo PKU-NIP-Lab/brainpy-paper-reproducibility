@@ -6,7 +6,7 @@ import numba
 
 
 def abs_eval(data, indices, indptr, vector, shape):
-  return ShapedArray((shape[1],), data.dtype),
+  return [ShapedArray((shape[1],), data.dtype)]
 
 
 @numba.njit(fastmath=True)
@@ -14,11 +14,12 @@ def sparse_op(outs, ins):
   res_val = outs[0]
   res_val.fill(0)
   values, col_indices, row_ptr, vector, shape = ins
+  values = values[()]
 
   for row_i in range(shape[0]):
-    v = vector[row_i]
-    for j in range(row_ptr[row_i], row_ptr[row_i + 1]):
-      res_val[col_indices[j]] += values * v
+    if vector[row_i]:
+      for j in range(row_ptr[row_i], row_ptr[row_i + 1]):
+        res_val[col_indices[j]] += values
 
 
 event_op = bm.XLACustomOp(eval_shape=abs_eval, con_compute=sparse_op)
