@@ -148,3 +148,10 @@ cython_debug/
 /figure8B/speed_results_old/
 /figure8C/speed_results_mon/
 /figure8C/speed_results/
+/figure8C/output/
+/results/
+/figure8C/brian2_cpp/
+/figure8A/speed_results_old/
+/figure8A/speed_results_ubuntu22/
+/figure8B/speed_results_ubuntu22/
+/copy/

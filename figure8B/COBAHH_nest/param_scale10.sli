@@ -62,7 +62,7 @@
 
   %number of neurons to stimulate
   /Nstim 50
-  /simtime 10000.0 ms % simulated time
+  /simtime 5000.0 ms % simulated time
   /dt          0.1 ms % simulation step
 
   /NE 32000       % number of excitatory neurons

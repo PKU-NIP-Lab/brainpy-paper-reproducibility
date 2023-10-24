@@ -3,8 +3,6 @@ import json
 
 import brainpy as bp
 import brainpy.math as bm
-import matplotlib.pyplot as plt
-import numpy as np
 from jax.experimental.sparse import BCOO
 
 taum = 20
@@ -137,83 +135,10 @@ def compare_with_or_without_jit(duration=1e3, check=False, n_run=2, jit=False, r
       json.dump(results, file)
 
 
-def get_linux_result():
-  results = dict()
-  results['num'] = np.asarray([4000 * s for s in (0.1, 0.2, 0.4, 0.8, 1.0, 2.0,
-                                                  3.0, 4.0, 5., 6., 7., 8., 9.)])
-
-  # cpu
-  dense_jit_cpu = [1.3729751110076904, 6.097690582275391, 18.534690141677856, 69.70568895339966,
-                   91.58101773262024, 218.5230414867401, 436.8243465423584, 811.8477251529694,
-                   1168.808358669281, 1618.178232908249, 2259.479111433029, 3396.037414073944,
-                   3618.585748195648, ]
-  dense_cpu = [26.399487733840942, 43.48150682449341, 122.88581395149231, 324.1572985649109,
-               618.4884805679321, ]
-  dense_jit_cpu = [1.397280216217041, 7.878061532974243, 20.594850301742554, 73.83361840248108,
-                   101.459481716156, 227.6046645641327, 468.59902596473694]
-  dense_cpu = [341.69391717, 383.56625386, 495.81000615, 900.64367979, 1376.53286872,
-               4645.87830868, 8886.88013333]
-
-  results['dense_jit_cpu'] = np.asarray(dense_jit_cpu)
-  results['dense_cpu'] = np.asarray(dense_cpu)
-
-  # print(results['dense_cpu'] / results['dense_jit_cpu'][:5])
-  # print(results['dense_jit_cpu'] / results['event_sparse_jit_cpu'])
-
-  # gpu
-  dense_jit_gpu = [0.5780010223388672, 0.7102963924407959, 1.4245562553405762, 3.670361280441284,
-                   5.310930252075195, 17.00484275817871, 39.14670395851135, 68.99373984336853,
-                   105.47189927101135, 148.22078132629395, 199.0734441280365, 241.07212591171265,
-                   328.23902130126953, ]
-  dense_gpu = [64.4805896282196, 65.79613924026489, 63.659353494644165, 64.5964105129242,
-               66.47876954078674, 105.78456974029541, 205.21649408340454, 311.4041268825531,
-               450.2032811641693, 628.1145832538605, 832.2800834178925, 1048.7322623729706]
-
-  results['dense_jit_gpu'] = np.asarray(dense_jit_gpu)
-  results['dense_gpu'] = np.asarray(dense_gpu)
-
-  # print(results['dense_gpu'] / results['dense_jit_gpu'][:5])
-
-  return results
-
-
-def visualize_coba_with_or_without_jit(num=5, device='cpu'):
-  results = get_linux_result()
-
-  plt.rcParams.update({"font.size": 15})
-  fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
-  ax = fig.add_subplot(gs[0, 0])
-  if device == 'cpu':
-    plt.semilogy(results['num'][:num], results['dense_jit_cpu'][:num],
-                 linestyle="--", marker='v', label='With JIT',
-                 linewidth=3, markersize=10)
-    plt.semilogy(results['num'][:num], results['dense_cpu'][:num],
-                 linestyle="--", marker='D', label='Without JIT',
-                 linewidth=3, markersize=10)
-  elif device == 'gpu':
-    plt.semilogy(results['num'][:num], results['dense_jit_gpu'][:num],
-                 linestyle="--", marker='v', label='With JIT',
-                 linewidth=3, markersize=10)
-    plt.semilogy(results['num'][:num], results['dense_gpu'][:num],
-                 linestyle="--", marker='D', label='Without JIT',
-                 linewidth=3, markersize=10)
-  else:
-    raise ValueError
-  lg = plt.legend(fontsize=12, loc='best')
-  lg.get_frame().set_alpha(0.3)
-  # ax.set_title(f'Reducing overhead in COBA with JIT ({device})')
-  plt.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-  plt.xlabel('Number of neurons')
-  plt.ylabel('Simulation Time [s]')
-  ax.spines['top'].set_visible(False)
-  ax.spines['right'].set_visible(False)
-  plt.savefig(f'results/jit-reduce-coba-overhead-{device}.pdf', dpi=1000, transparent=True)
-  plt.show()
-
-
 if __name__ == '__main__':
   pass
-  # bm.set_platform('cpu')
-  compare_with_or_without_jit(res_file='results/coba-dense-jit=False.json', jit=True, platform='cpu')
-  visualize_coba_with_or_without_jit(12, device='gpu')
-  visualize_coba_with_or_without_jit(7, device='cpu')
+  compare_with_or_without_jit(res_file='results/coba-cpu-dense-jit.json', jit=True, platform='cpu')
+  compare_with_or_without_jit(res_file='results/coba-cpu-dense-no-jit.json', jit=False, platform='cpu')
+
+  compare_with_or_without_jit(res_file='results/coba-gpu-dense-jit.json', jit=True, platform='gpu')
+  compare_with_or_without_jit(res_file='results/coba-gpu-dense-no-jit.json', jit=False, platform='gpu')

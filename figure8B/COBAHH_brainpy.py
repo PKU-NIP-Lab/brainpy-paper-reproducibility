@@ -81,18 +81,6 @@ class HH(bp.dyn.NeuDyn):
     return self.spike.value
 
 
-class MaskedLinear(bp.dnn.Layer):
-  def __init__(self, conn, weight):
-    super().__init__()
-    assert isinstance(conn, bp.connect.TwoEndConnector)
-    self.conn = conn
-    self.weight = weight
-    self.mask = self.conn.require('conn_mat')
-
-  def update(self, x):
-    return (x @ self.mask) * self.weight
-
-
 class Exponential(bp.Projection):
   def __init__(self, num_pre, post, prob, g_max, tau, E):
     super().__init__()
@@ -134,30 +122,34 @@ def run_a_simulation(scale=10, duration=1e3, platform='cpu', x64=True, monitor=F
   bm.random.seed()
   if x64:
     bm.enable_x64()
+  else:
+    bm.disable_x64()
 
-  net = COBA_HH_Net(scale=scale, monitor=monitor)
+  net = COBA_HH_Net(scale=scale, monitor=True)
   indices = np.arange(int(duration / bm.get_dt()))
 
   t0 = time.time()
+  # if the network size is big, please turn on "progress_bar"
+  # otherwise, the XLA may compute wrongly
   r = bm.for_loop(net.step_run, indices, progress_bar=False)
   t1 = time.time()
 
-  # fig, gs = bp.visualize.get_figure(1, 1, 15, 30)
-  # r = bm.as_numpy(r)
-  # bp.visualize.raster_plot(indices, r, show=False)
-  # plt.savefig(f'speed_results/COBAHH-scale={scale}.png')
+  if monitor:
+    fig, gs = bp.visualize.get_figure(1, 1, 15, 30)
+    r = bm.as_numpy(r)
+    bp.visualize.raster_plot(indices, r, show=False)
+    # plt.savefig(f'speed_results/COBAHH-scale={scale}.png')
+    plt.show()
 
   # running
-  if monitor:
-    rate = bm.as_numpy(r).sum() / net.N.num / duration * 1e3
-    print(f'scale={scale}, size={net.num}, time = {t1 - t0} s, '
-          f'firing rate = {rate} Hz')
+  if r is None:
+    rate = 0.
   else:
-    rate = -1e5
-    print(f'scale={scale}, size={net.num}, time = {t1 - t0} s')
+    rate = bm.as_numpy(r).sum() / net.N.num / duration * 1e3
+
+  print(f'scale={scale}, size={net.num}, time = {t1 - t0} s, firing rate = {rate} Hz')
   bm.disable_x64()
   bm.clear_buffer_memory(platform)
-  # return net.N.num, t1 - t0, t1 - t0
   return {'num': net.N.num,
           'exe_time': t1 - t0,
           'run_time': t1 - t0,
@@ -171,21 +163,27 @@ def check_firing_rate(x64=True, platform='cpu'):
 
 
 def benchmark(duration=1000., platform='cpu', x64=True):
+  postfix = 'x64' if x64 else 'x32'
+  fn = f'speed_results/brainpy-COBAHH-{platform}-{postfix}.json'
+
+  if platform == 'cpu':
+    scales = [1, 2, 4, 6, 8, 10, 20]
+    scales = [10, 20, 30, 40]
+  else:
+    scales = [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]
+    scales = [60, 80, 100]
+
   final_results = dict()
-  # for scale in [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]:
-  for scale in [1, 2, 4, 6, 8, 10, 20, 30, 40, 50]:
-  # for scale in [30, 40, 50]:
-    for _ in range(10):
-      r = run_a_simulation(scale=scale, duration=duration, platform=platform, x64=x64, monitor=True)
+  for scale in scales:
+    for _ in range(4):
+      r = run_a_simulation(scale=scale, duration=duration, platform=platform, x64=x64, monitor=False)
       if r['num'] not in final_results:
-          final_results[r['num']] = {'exetime': [], 'runtime': [], 'firing_rate': []}
+        final_results[r['num']] = {'exetime': [], 'runtime': [], 'firing_rate': []}
       final_results[r['num']]['exetime'].append(r['exe_time'])
       final_results[r['num']]['runtime'].append(r['run_time'])
       final_results[r['num']]['firing_rate'].append(r['fr'])
-
-  postfix = 'x64' if x64 else 'x32'
-  with open(f'speed_results/brainpy-COBAHH-{platform}-{postfix}.json', 'w') as fout:
-    json.dump(final_results, fout, indent=2)
+    with open(fn, 'w') as fout:
+      json.dump(final_results, fout, indent=2)
 
 
 def visualize_spike_raster(duration=100., x64=True, platform='cpu'):
@@ -203,15 +201,13 @@ def visualize_spike_raster(duration=100., x64=True, platform='cpu'):
   ax.spines['top'].set_visible(False)
   ax.spines['right'].set_visible(False)
   plt.title(f'BrainPy {platform.upper()} {name}')
-  plt.savefig(f'COBAHH-brainpy-{platform}-{name}.pdf')
-
-
-
+  # plt.savefig(f'COBAHH-brainpy-{platform}-{name}.pdf')
+  plt.show()
 
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
-  parser.add_argument('-platform', default='cpu', help='platform')
+  parser.add_argument('-platform', default='gpu', help='platform')
   parser.add_argument('-x64', action='store_true')
   args = parser.parse_args()
 

@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 
-import os
 import time
 
 import brainpy as bp
 import brainpy.math as bm
-import jax
 import matplotlib.pyplot as plt
 import numpy as np
-
-# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 taum = 20
 taue = 5
@@ -53,7 +49,7 @@ class LIF(bp.dyn.NeuGroup):
     self.input[:] = Ib
 
 
-class _DenseSynapse(bp.dyn.TwoEndConn):
+class _DenseSynapse(bp.synapses.TwoEndConn):
   def __init__(self, pre, post, conn, g_max, tau, E):
     super().__init__(pre, post, conn)
 
@@ -74,7 +70,7 @@ class _DenseSynapse(bp.dyn.TwoEndConn):
     self.post.input += bm.sum(self.g, axis=0) * (self.E - self.post.V)
 
 
-class _EventSparseSynapse(bp.dyn.TwoEndConn):
+class _EventSparseSynapse(bp.synapses.TwoEndConn):
   def __init__(self, pre, post, conn, g_max, tau, E):
     super().__init__(pre, post, conn)
 
@@ -189,7 +185,7 @@ def separate_syn_net_sim_time(op='dense', platform='cpu', n_run=20, n_scale=100)
 
   indices = np.arange(5000) + 1
   # scales = np.asarray([0.2, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0])
-  scales = np.asarray([ 3.0])
+  scales = np.asarray([3.0])
 
   for scale in scales[:n_scale]:
     for ni in range(n_run):
@@ -231,70 +227,5 @@ def separate_syn_net_sim_time(op='dense', platform='cpu', n_run=20, n_scale=100)
   plt.show()
 
 
-def _plot(ax, res, label, marker='v'):
-  plt.plot(res['num'],  (res['network'].mean(1) - res['neuron'].mean(1)) / res['network'].mean(1),
-           linestyle="--", marker=marker, linewidth=3, markersize=10, label=label)
-  plt.hlines(y=1., xmin=res['num'][0], xmax=res['num'][-1], colors='purple', linestyles='--', lw=1)
-
-
-def show_result_single(filename):
-  gpu_res = np.load(filename)
-  plt.rcParams.update({"font.size": 15})
-  fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
-  ax = fig.add_subplot(gs[0, 0])
-  _plot(ax, gpu_res, '')
-  ax.spines['top'].set_visible(False)
-  ax.spines['right'].set_visible(False)
-  plt.xlabel('Number of neurons')
-  plt.ylabel('Synaptic Computation Ratio')
-  plt.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-  plt.legend()
-  plt.show()
-
-
-def show_result_all(cpu_dense=None,
-                    gpu_dense=None,
-                    cpu_event=None,
-                    gpu_event=None,
-                    save_filename=None):
-  plt.rcParams.update({"font.size": 15})
-  fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
-  ax = fig.add_subplot(gs[0, 0])
-
-  if cpu_dense is not None:
-    res = np.load(cpu_dense)
-    _plot(ax, res, 'CPU, Dense', marker='P')
-  if cpu_event is not None:
-    res = np.load(cpu_event)
-    _plot(ax, res, 'CPU, Event', marker='v')
-  if gpu_dense is not None:
-    res = np.load(gpu_dense)
-    _plot(ax, res, 'GPU, Dense', marker='s')
-  if gpu_event is not None:
-    res = np.load(gpu_event)
-    _plot(ax, res, 'GPU, Event', marker='D')
-
-  ax.spines['top'].set_visible(False)
-  ax.spines['right'].set_visible(False)
-  plt.xlabel('Number of neurons')
-  plt.ylabel('Synaptic Computing Time Ratio')
-  plt.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
-  plt.xlim(-1, 1.25e4)
-  # plt.legend(loc='center right')
-  lg = plt.legend(fontsize=11, loc='center right')
-  lg.get_frame().set_alpha(0.3)
-  if save_filename:
-    plt.savefig(save_filename, dpi=1000, transparent=True)
-  plt.show()
-
-
 if __name__ == '__main__':
-  pass
   separate_syn_net_sim_time(op='dense', platform='gpu')
-  # show_result_all(
-  #   cpu_dense='results/syn-vs-net-ratio-dense-cpu-v2.npz',
-  #   gpu_dense='results/syn-vs-net-ratio-dense-A6000-v2.npz',
-  #   cpu_event='results/syn-vs-net-ratio-event-cpu-v2.npz',
-  #   gpu_event='results/syn-vs-net-ratio-event-gpu-v2.npz',
-  #   save_filename='results/syn_ratio.pdf'
-  # )

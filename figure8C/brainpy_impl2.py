@@ -82,8 +82,9 @@ def simulate_a_trial(scale, platform='cpu', x64=False, monitor=True):
 
 def benchmark1(platform='cpu', x64=True):
   final_results = dict()
-  for scale in [200, 400, 800, 1000]:
-    for _ in range(10):
+  # for scale in [200, 400, 800, 1000]:
+  for scale in [1, 4, 8, 10, ]:
+    for _ in range(4):
       r = simulate_a_trial(scale=scale, platform=platform, x64=x64, monitor=True)
       if r['num'] not in final_results:
         final_results[r['num']] = {'exetime': [], 'runtime': []}
@@ -98,8 +99,11 @@ def benchmark1(platform='cpu', x64=True):
 
 def benchmark2(devices, platform='cpu', x64=True):
   final_results = dict()
-  for scale in [1, 4, 8, 10, 20, 40, 60, 80, 100]:
-    for _ in range(10):
+  scales = [1, 4, 8, 10, 20, 40, 60, 80, 100]
+  scales = [1, 4, 8, 10, ]
+
+  for scale in scales:
+    for _ in range(4):
       with bm.sharding.device_mesh(devices, [bm.sharding.NEU_AXIS]):
         r = simulate_a_trial(scale=scale, platform=platform, x64=x64, monitor=True)
       if r['num'] not in final_results:
@@ -115,7 +119,7 @@ def benchmark2(devices, platform='cpu', x64=True):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
-  parser.add_argument('-platform', default='cpu', help='platform')
+  parser.add_argument('-platform', default='gpu', help='platform')
   parser.add_argument('-x64', action='store_true')
   args = parser.parse_args()
   benchmark1(platform=args.platform, x64=args.x64)

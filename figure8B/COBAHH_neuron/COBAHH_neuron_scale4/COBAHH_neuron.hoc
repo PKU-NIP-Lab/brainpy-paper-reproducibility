@@ -14,7 +14,7 @@ obfunc newcell() {
 // Create the cells, then connect them.
 create_net()  // in net.hoc
 
-// STOPSTIM=10000  // duration of stimulation (ms)
+// STOPSTIM=5000  // duration of stimulation (ms)
 
 // Randomized spike trains driving excitatory synapses.
 create_stim(run_random_low_start_, AMPA_GMAX)  // in netstim.hoc

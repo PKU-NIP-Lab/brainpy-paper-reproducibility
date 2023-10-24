@@ -105,20 +105,16 @@ def run_a_simulation(scale=10, duration=1e3, platform='cpu', x64=True, monitor=F
   if x64:
     bm.enable_x64()
 
-  net = COBA(scale=scale, monitor=monitor)
+  net = COBA(scale=scale, monitor=True)
   indices = np.arange(int(duration / bm.get_dt()))
   t0 = time.time()
   r = bm.for_loop(net.step_run, indices, progress_bar=False)
   t1 = time.time()
 
   # running
-  if monitor:
-    rate = bm.as_numpy(r).sum() / net.N.num / duration * 1e3
-    print(f'scale={scale}, size={net.N.num}, time = {t1 - t0} s, '
-          f'firing rate = {rate} Hz')
-  else:
-    rate = None
-    print(f'scale={scale}, size={net.N.num}, time = {t1 - t0} s')
+  rate = bm.as_numpy(r).sum() / net.N.num / duration * 1e3
+  print(f'scale={scale}, size={net.N.num}, time = {t1 - t0} s, '
+        f'firing rate = {rate} Hz')
   bm.clear_buffer_memory(platform)
   bm.disable_x64()
 
@@ -134,23 +130,33 @@ def check_firing_rate(x64=False, platform='cpu'):
 
 
 def benchmark(duration=1000., platform='cpu', x64=True):
+  postfix = 'x64' if x64 else 'x32'
+  fn = f'speed_results/brainpy-COBA-{platform}-{postfix}.json'
+
+  if platform == 'cpu':
+    scales = [1, 2, 4, 6, 8, 10, 20]
+    scales = [30, 40]
+    scales = [1, 2, 4, 6, 8, 10, 20, 30, 40]
+  else:
+    scales = [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]
+    scales = [200, 400]
+
   final_results = dict()
-  for scale in [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]:
-    for _ in range(10):
+  for scale in scales:
+    for _ in range(4):
       r = run_a_simulation(scale=scale, duration=duration, platform=platform, x64=x64, monitor=True)
       if r['num'] not in final_results:
         final_results[r['num']] = {'exetime': [], 'runtime': [], 'firing_rate': []}
       final_results[r['num']]['exetime'].append(r['exe_time'])
       final_results[r['num']]['runtime'].append(r['run_time'])
       final_results[r['num']]['firing_rate'].append(r['fr'])
-  postfix = 'x64' if x64 else 'x32'
-  with open(f'speed_results/brainpy-COBA-{platform}-{postfix}.json', 'w') as fout:
-    json.dump(final_results, fout, indent=2)
+    with open(fn, 'w') as fout:
+      json.dump(final_results, fout, indent=2)
 
 
 if __name__ == '__main__':
   x64 = False if sys.argv[1] == '0' else True
-  benchmark(duration=5. * 1e3, platform='gpu', x64=x64)
+  benchmark(duration=5e3, platform='gpu', x64=x64)
 
   # check_firing_rate(platform='gpu')
 

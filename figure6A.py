@@ -143,54 +143,6 @@ def visualize_results(resfile=None, res=None, save_filename=None):
   plt.show()
 
 
-def visualize_results_all(cpu_file, gpu_file, save_filename=None):
-  def _show(ax, results, legend=False):
-    results = jax.tree_util.tree_map(lambda a: a[:9], results)
-    ax.plot(results['FLOPs'], results['LIF'], linestyle="--", marker='v',
-            label='LIF', linewidth=3, markersize=10)
-    ax.plot(results['FLOPs'], results['Dot'], linestyle="--", marker='D',
-            label='Dot', linewidth=3, markersize=10)
-    ax.plot(results['FLOPs'], results['LIF_with_JIT'], linestyle="--", marker='o',
-            label="LIF with JIT", linewidth=3, markersize=10)
-    ax.set_ylabel('Time [s]')
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.set_xlim(-1e8, 2.21e9)
-    if legend:
-      lg = plt.legend(fontsize=11, loc='best')
-      lg.get_frame().set_alpha(0.3)
-
-  plt.rcParams.update({"font.size": 15})
-  fig, gs = bp.visualize.get_figure(2, 1, 2.25, 6.)
-
-  # cpu
-  res = np.load(cpu_file)
-  results = dict()
-  results['FLOPs'] = np.asarray(res['FLOPs'])
-  results['LIF'] = np.asarray(res['LIF'])
-  results['Dot'] = np.asarray(res['Dot'])
-  results['LIF_with_JIT'] = np.asarray(res['LIF_with_JIT'])
-  ax1 = fig.add_subplot(gs[0, 0])
-  _show(ax1, results, legend=True)
-  ax1.set_xticks([])
-
-  # gpu
-  res = np.load(gpu_file)
-  results = dict()
-  results['FLOPs'] = np.asarray(res['FLOPs'])
-  results['LIF'] = np.asarray(res['LIF'])
-  results['Dot'] = np.asarray(res['Dot'])
-  results['LIF_with_JIT'] = np.asarray(res['LIF_with_JIT'])
-  ax2 = fig.add_subplot(gs[1, 0])
-  _show(ax2, results, legend=False)
-  ax2.set_xlabel('FLOPs')
-  fig.align_ylabels([ax1, ax2])
-
-  if save_filename:
-    plt.savefig(save_filename, dpi=1000, transparent=True)
-  plt.show()
-
-
 def show_comparison(resfile=None, platform='cpu', num_run=20):
   compare_results = {'FLOPs': [],
                      'LIF': [],
@@ -262,15 +214,13 @@ def show_comparison(resfile=None, platform='cpu', num_run=20):
   visualize_results(res=compare_results, save_filename=save_filename)
 
 
+
 if __name__ == '__main__':
   pass
-  # show_comparison(resfile='results/speed_comparison_under_same_FLOPs-A6000.npz', platform='gpu')
-  # visualize_results(resfile='results/speed_comparison_under_same_FLOPs-A6000.npz')
 
-  visualize_results_all(cpu_file='results/speed_comparison_under_same_FLOPs-mac-M1-v2.npz',
-                        gpu_file='results/speed_comparison_under_same_FLOPs-A6000.npz',
-                        save_filename='results/JIT-CPU-GPU-op.pdf')
-  # visualize_results(resfile='results/speed_comparison_under_same_FLOPs-mac-M1-v2.npz',
-  #                   save_filename='results/mac-M1.png')
-  # visualize_results(resfile='results/speed_comparison_under_same_FLOPs-V100.npz',
-  #                   save_filename='results/V100.png')
+  cpu_file = 'results/speed_comparison_under_same_FLOPs-cpu.npz'
+  gpu_file = 'results/speed_comparison_under_same_FLOPs-gpu.npz'
+
+  show_comparison(resfile=cpu_file, platform='cpu')
+  show_comparison(resfile=gpu_file, platform='gpu')
+

@@ -73,8 +73,8 @@ def run(scale, duration, res_dict=None, ):
   t1 = time.time()
   simulate(duration)
   t2 = time.time()
-  print(f'ANNarchy compilation + simulation used time {t2 - t0} s.')
-  print(f'ANNarchy simulation used time {time.time() - t1} s.')
+  print(f'Network size {num_neu}, ANNarchy compilation + simulation used time {t2 - t0} s.')
+  print(f'Network size {num_neu}, ANNarchy simulation used time {time.time() - t1} s.')
   if res_dict is not None:
     res_dict['annarchy'].append({'num_neuron': NE + NI,
                                  'sim_len': duration,
@@ -83,14 +83,11 @@ def run(scale, duration, res_dict=None, ):
                                  'dt': 0.1})
 
 
-run(scale=4.,  duration=5000.)
-
-
-if __name__ == '__main__1':
+if __name__ == '__main__':
   import json
 
   speed_res = {f'annarchy': []}
-  for scale in [1, 1, 2, 4, 6, 8, 10]:
+  for scale in [1, 2, 4, 6, 8, 10]:
     for stim in [5. * 1e3]:
       run(scale=scale, res_dict=speed_res, duration=stim)
 

@@ -56,34 +56,23 @@ def run_(scale=1., duration=1000., monitor=False):
                   threshold='v>Vt',
                   reset='v = Vr',
                   refractory=5 * ms,
-                  method='euler')
-
-  if monitor:
-    mon = SpikeMonitor(P)
-
+                  method='exponential_euler')
   Ce = Synapses(P[:num_exc], P, on_pre='ge += we')
   Ci = Synapses(P[num_exc:], P, on_pre='gi += wi')
-
   P.v = (np.random.randn(num_exc + num_inh) * 5. - 55.) * mvolt
   Ce.connect(p=80 / (num_exc + num_inh))
   Ci.connect(p=80 / (num_exc + num_inh))
+  mon = SpikeMonitor(P)
 
   t1 = time.time()
   run(duration * ms)
   t2 = time.time()
-  if monitor:
-    rate = len(mon.i) / (num_exc + num_inh) / duration * 1e3
-    print(f'size = {num_exc + num_inh}, '
-          f'execution time = {device._last_run_time} s, '
-          f'running time = {t2 - t1} s, '
-          f'rate = {rate} Hz')
-  else:
-    rate = None
-    print(f'size = {num_exc + num_inh}, '
-          f'execution time = {device._last_run_time} s, '
-          f'running time = {t2 - t1} s')
-  print()
-  print()
+
+  rate = len(mon.i) / (num_exc + num_inh) / duration * 1e3
+  print(f'size = {num_exc + num_inh}, '
+        f'execution time = {device._last_run_time} s, '
+        f'running time = {t2 - t1} s, '
+        f'rate = {rate} Hz')
 
   return {'num': num_exc + num_inh,
           'exe_time': device._last_run_time,
@@ -93,21 +82,26 @@ def run_(scale=1., duration=1000., monitor=False):
 
 def benchmark(duration=1000.):
   final_results = dict()
-  for scale in [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]:
-    for _ in range(10):
+  if len(sys.argv) > 2:
+    name_ = run_on + f'-th{prefs.devices.cpp_standalone.openmp_threads}'
+  else:
+    name_ = run_on
+  fn = f'speed_results/brian2-COBA-{name_}.json'
+  if run_on == 'cpp_standalone':
+    scales = [1, 2, 4, 6, 8, 10, 20]
+  else:
+    scales = [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]
+
+  for scale in scales:
+    for _ in range(4):
       r = run_(scale=scale, duration=duration, monitor=False)
       if r['num'] not in final_results:
         final_results[r['num']] = {'exetime': [], 'runtime': [], 'firing_rate': []}
       final_results[r['num']]['exetime'].append(r['exe_time'])
       final_results[r['num']]['runtime'].append(r['run_time'])
       final_results[r['num']]['firing_rate'].append(r['fr'])
-  if len(sys.argv) > 2:
-    name_ = run_on + f'-thread{prefs.devices.cpp_standalone.openmp_threads}'
-  else:
-    name_ = run_on
-  # with open(f'speed_results/brian2-COBA-{run_on}-thread{prefs.devices.cpp_standalone.openmp_threads}.json', 'w') as fout:
-  with open(f'speed_results/brian2-COBA-{name_}.json', 'w') as fout:
-    json.dump(final_results, fout, indent=2)
+    with open(fn, 'w') as fout:
+      json.dump(final_results, fout, indent=2)
 
 
 def check_firing_rate():

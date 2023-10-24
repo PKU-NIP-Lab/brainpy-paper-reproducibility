@@ -14,10 +14,12 @@ if run_on == 'cpp_standalone':
 
 elif run_on == 'genn':
   import brian2genn
+
   set_device("genn")
 
 elif run_on == 'cuda_standalone':
   import brian2cuda
+
   set_device("cuda_standalone", directory='brian2_cuda')
 
 else:
@@ -84,23 +86,16 @@ def simulate(scale, duration, monitor=False):
   # Initialization
   P.v = 'El + (randn() * 5 - 5)'
 
-  if monitor:
-    mon = SpikeMonitor(P)
-
+  mon = SpikeMonitor(P)
   # Record a few traces
   t0 = time.time()
   run(duration * ms)
   t1 = time.time()
-  if monitor:
-    rate = len(mon.i) / num / duration * 1e3
-    print(f'size = {num}, '
-          f'execution time = {device._last_run_time} s, '
-          f'running time = {t1 - t0} s, '
-          f'rate = {len(mon.i) / num / duration * 1e3} Hz')
-  else:
-    rate = -1e5
-    print(f'size = {num}, execution time = {device._last_run_time} s, running time = {t1 - t0} s')
-  print()
+  rate = len(mon.i) / num / duration * 1e3
+  print(f'size = {num}, '
+        f'execution time = {device._last_run_time} s, '
+        f'running time = {t1 - t0} s, '
+        f'rate = {len(mon.i) / num / duration * 1e3} Hz')
 
   return {'num': num,
           'exe_time': device._last_run_time,
@@ -118,20 +113,28 @@ def check_firing_rate():
 
 
 def benchmark(duration=1000.):
+  name_ = run_on
+  if len(sys.argv) > 2:
+    name_ = run_on + f'-thread{prefs.devices.cpp_standalone.openmp_threads}'
+  fn = f'speed_results/brian2-COBAHH-{name_}.json'
+
+  if run_on == 'cpp_standalone':
+    scales = [1, 2, 4, 6, 8, 10, 20]
+  else:
+    scales = [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]
+    scales = [60, 80, 100]
+
   final_results = dict()
-  for scale in [1, 2, 4, 6, 8, 10, 20, 30, 40, 50]:
-    for _ in range(10):
+  for scale in scales:
+    for _ in range(4):
       r = simulate(scale=scale, duration=duration, monitor=False)
       if r['num'] not in final_results:
         final_results[r['num']] = {'exetime': [], 'runtime': [], 'firing_rate': []}
       final_results[r['num']]['exetime'].append(r['exe_time'])
       final_results[r['num']]['runtime'].append(r['run_time'])
       final_results[r['num']]['firing_rate'].append(r['fr'])
-  name_ = run_on
-  if len(sys.argv) > 2:
-    name_ = run_on + f'-thread{prefs.devices.cpp_standalone.openmp_threads}'
-  with open(f'speed_results/brian2-COBAHH-{name_}.json', 'w') as fout:
-    json.dump(final_results, fout, indent=2)
+    with open(fn, 'w') as fout:
+      json.dump(final_results, fout, indent=2)
 
 
 def visualize_spike_raster(scale, duration):
@@ -157,21 +160,18 @@ def visualize_spike_raster(scale, duration):
   # Record a few traces
   run(duration * ms)
 
-
   import brainpy as bp
   fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
   ax = fig.add_subplot(gs[0])
-  plt.plot(mon.t / ms, mon.i, '.k', markersize=2,)
+  plt.plot(mon.t / ms, mon.i, '.k', markersize=2, )
   ax.spines['top'].set_visible(False)
   ax.spines['right'].set_visible(False)
   plt.title(f'Brian2 {run_on}')
   plt.savefig(f'COBAHH-brian2-{run_on}.pdf')
 
 
-
 if __name__ == '__main__':
   # check_firing_rate()
-  # benchmark(duration=5e3)
+  benchmark(duration=5e3)
 
-  visualize_spike_raster(1., 100.)
-
+  # visualize_spike_raster(1., 100.)

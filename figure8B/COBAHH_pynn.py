@@ -15,36 +15,16 @@ import matplotlib.pyplot as plt
 from pyNN.random import RandomDistribution
 from pyNN.utility import get_simulator, Timer, ProgressBar
 from quantities import ms
-import brainpy as bp
-
 
 # === Configure the simulator ================================================
 sim, options = get_simulator(("--threads", "number of threads", {'type': int}),)
 
 # === Define parameters ========================================================
 
-# Cell parameters
-tau_m = 20.  # (ms)
-cm = 200.  # (nF/cm²)
-E_leak = -60.  # (mV)
-v_thresh = -50.  # (mV)
-v_reset = -60.  # (mV)
-t_refrac = 5.  # (ms) (clamped at v_reset)
-tau_exc = 5.  # (ms)
-tau_inh = 10.  # (ms)
-
-# Synapse parameters
-Gexc = 6.  # (nS)
-Ginh = 67.  # (nS)
-Erev_exc = 0.  # (mV)
-Erev_inh = -80.  # (mV)
-
-# Connection parameters
-r_ei = 4.0  # number of excitatory cells:number of inhibitory cells
-pconn = 0.02  # connection probability
-
 # other parameters
 dt = 0.1  # (ms) simulation timestep
+pconn = 0.02  # connection probability
+r_ei = 4.0  # number of excitatory cells:number of inhibitory cells
 
 
 def run(scale=4., num_thread=1, duration=1000., monitor=False):
@@ -54,25 +34,29 @@ def run(scale=4., num_thread=1, duration=1000., monitor=False):
 
   sim.setup(timestep=dt, threads=num_thread, label='VA')
   num_process = sim.num_processes()
-  cell_params = {'tau_m': tau_m, 'tau_syn_E': tau_exc, 'tau_syn_I': tau_inh,
-                 'v_rest': E_leak, 'v_reset': v_reset, 'v_thresh': v_thresh,
-                 'cm': cm, 'tau_refrac': t_refrac, 'e_rev_E': Erev_exc,
-                 'e_rev_I': Erev_inh, 'i_offset': 200}
+
+  we = 6. / 1e3
+  wi = 67. / 1e3
+  cell_params = {'gbar_Na': 20., 'gbar_K': 6., 'g_leak': 0.01,
+                 'cm': 0.2, 'v_offset': -63.,
+                 'e_rev_Na': 50.,  'e_rev_K': -90., 'e_rev_leak': -60.,
+                 'e_rev_E': 0., 'e_rev_I': -80., 'i_offset': 0.,
+                 'tau_syn_E': 5., 'tau_syn_I': 10.}
 
   timer = Timer()
   timer.start()
   # create a single population of neurons, and then use population views to define
   # excitatory and inhibitory sub-populations
-  all_cells = sim.Population(n_exc + n_inh, sim.IF_cond_exp(**cell_params), label="All Cells")
+  all_cells = sim.Population(n_exc + n_inh, sim.HH_cond_exp(**cell_params), label="All Cells")
   all_cells.record('spikes')
 
   # initialize the cells
-  all_cells.initialize(v=RandomDistribution('normal', mu=-65., sigma=5.))
+  all_cells.initialize(v=RandomDistribution('normal', mu=-55., sigma=5.))
 
   # synapses
   connector = sim.FixedProbabilityConnector(pconn / scale, callback=ProgressBar(width=100))
-  exc_syn = sim.StaticSynapse(weight=Gexc)
-  inh_syn = sim.StaticSynapse(weight=Ginh)
+  exc_syn = sim.StaticSynapse(weight=we)
+  inh_syn = sim.StaticSynapse(weight=wi)
   exc_conn = sim.Projection(all_cells[:n_exc], all_cells, connector, exc_syn, receptor_type='excitatory')
   inh_conn = sim.Projection(all_cells[n_exc:], all_cells, connector, inh_syn, receptor_type='inhibitory')
   buildCPUTime = timer.diff()
@@ -80,22 +64,24 @@ def run(scale=4., num_thread=1, duration=1000., monitor=False):
   # === Run simulation ===========================================================
   sim.run(duration)
   simCPUTime = timer.diff()
+
+  connections = "%d e→e,i  %d i→e,i" % (exc_conn.size(), inh_conn.size())
   data = all_cells.get_data().segments[0]
   fr = len(data.spiketrains.multiplexed[0]) / n / duration * 1e3
-  connections = "%d e→e,i  %d i→e,i" % (exc_conn.size(), inh_conn.size())
 
   print("\n--- Vogels-Abbott Network Simulation ---")
   print("Simulator              : %s" % options.simulator)
   print("Nodes                  : %d" % num_process)
   print("Number of Neurons      : %d" % n)
   print("Number of Synapses     : %s" % connections)
-  print("Excitatory conductance : %g nS" % Gexc)
-  print("Inhibitory conductance : %g nS" % Ginh)
+  print("Excitatory conductance : %g nS" % we)
+  print("Inhibitory conductance : %g nS" % wi)
   print("Build time             : %g s" % buildCPUTime)
   print("Simulation time        : %g s" % simCPUTime)
   print("Firing rate            : %g Hz" % fr)
 
   if monitor:
+    import brainpy as bp
     data = all_cells.get_data().segments[0]
     indices, times = data.spiketrains.multiplexed
     fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
@@ -108,14 +94,13 @@ def run(scale=4., num_thread=1, duration=1000., monitor=False):
 
   # === Finished with simulator ==================================================
   sim.end()
-  print('\n')
+  print('\n\n')
   return n, simCPUTime, buildCPUTime, fr
-
 
 
 def benchmark(duration=1000.):
   final_results = dict()
-  for scale in [2, 4, 6, 8, 10, 20]:
+  for scale in [1, 2, 4, 6, 8, 10, 20]:
   # for scale in [1, ]:
     for _ in range(2):
       num, t_exe, t_py, fr = run(scale=scale, num_thread=options.threads, duration=duration, monitor=False)
