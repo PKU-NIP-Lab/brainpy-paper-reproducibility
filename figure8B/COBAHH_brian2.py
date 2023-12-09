@@ -3,27 +3,39 @@ import sys
 from brian2 import *
 import time
 import json
+import argparse
 
-run_on = sys.argv[1]
+parser = argparse.ArgumentParser()
+parser.add_argument('--backend', type=str, default='cpp_standalone',
+                    choices=['cpp_standalone', 'genn', 'cuda_standalone'])
+parser.add_argument('--dtype', type=str, default='f64', choices=['f64', 'f32'])
+parser.add_argument('--threads', type=int, default=1)
+args = parser.parse_args()
 
-if len(sys.argv) > 2:
-  prefs.devices.cpp_standalone.openmp_threads = int(sys.argv[2])
 
-if run_on == 'cpp_standalone':
-  set_device('cpp_standalone', directory='brian2_cpp')
+if args.backend == 'cpp_standalone':
+  set_device('cpp_standalone')
 
-elif run_on == 'genn':
+elif args.backend == 'genn':
   import brian2genn
-
   set_device("genn")
 
-elif run_on == 'cuda_standalone':
+elif args.backend == 'cuda_standalone':
   import brian2cuda
-
-  set_device("cuda_standalone", directory='brian2_cuda')
+  set_device("cuda_standalone")
 
 else:
   raise ValueError
+
+if args.threads > 1:
+  prefs.devices.cpp_standalone.openmp_threads = args.threads
+if args.dtype == 'f32':
+  prefs.core.default_float_dtype = float32
+elif args.dtype == 'f64':
+  prefs.core.default_float_dtype = float64
+else:
+  raise ValueError
+
 
 defaultclock.dt = 0.1 * ms
 
@@ -71,7 +83,7 @@ eqs = Equations('''
 def simulate(scale, duration, monitor=False):
   start_scope()
   device.reinit()
-  device.activate()
+  device.activate(directory=None)
 
   num = int(4000 * scale)
   P = NeuronGroup(num, model=eqs, threshold='v>-20', refractory='v>-20',
@@ -113,16 +125,12 @@ def check_firing_rate():
 
 
 def benchmark(duration=1000.):
-  name_ = run_on
-  if len(sys.argv) > 2:
-    name_ = run_on + f'-thread{prefs.devices.cpp_standalone.openmp_threads}'
-  fn = f'speed_results/brian2-COBAHH-{name_}.json'
-
-  if run_on == 'cpp_standalone':
+  fn = f'speed_results/brian2-COBAHH-{args.backend}-th{args.threads}-{args.dtype}.json'
+  if args.backend == 'cpp_standalone':
     scales = [1, 2, 4, 6, 8, 10, 20]
   else:
     scales = [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]
-    scales = [60, 80, 100]
+    # scales = [60, 80, 100]
 
   final_results = dict()
   for scale in scales:
@@ -166,8 +174,8 @@ def visualize_spike_raster(scale, duration):
   plt.plot(mon.t / ms, mon.i, '.k', markersize=2, )
   ax.spines['top'].set_visible(False)
   ax.spines['right'].set_visible(False)
-  plt.title(f'Brian2 {run_on}')
-  plt.savefig(f'COBAHH-brian2-{run_on}.pdf')
+  plt.title(f'Brian2 {args.backend}')
+  plt.savefig(f'COBAHH-brian2-{args.backend}.pdf')
 
 
 if __name__ == '__main__':

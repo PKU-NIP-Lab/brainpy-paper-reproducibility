@@ -4,8 +4,8 @@
 #python brainpy_impl2.py -platform cpu -x64
 
 rm output/ -rf
-python Wang_2002_standalone.py cpp_standalone
+python Wang_2002_standalone.py --backend cpp_standalone
 rm output/ -rf
-python Wang_2002_standalone.py cpp_standalone 12
+python Wang_2002_standalone.py --backend cpp_standalone --threads 12
 rm output/ -rf
-python Wang_2002_standalone.py cuda_standalone
+python Wang_2002_standalone.py --backend cuda_standalone --dtype f32

@@ -1,26 +1,38 @@
 from brian2 import *
 import json
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--backend', type=str, default='cpp_standalone',
+                    choices=['cpp_standalone', 'genn', 'cuda_standalone'])
+parser.add_argument('--dtype', type=str, default='f64', choices=['f64', 'f32'])
+parser.add_argument('--threads', type=int, default=1)
+args = parser.parse_args()
 
 
-run_on = sys.argv[1]
-# run_on = 'cpp_standalone'
-
-if run_on == 'cpp_standalone':
+if args.backend == 'cpp_standalone':
   set_device('cpp_standalone')
 
-elif run_on == 'genn':
+elif args.backend == 'genn':
   import brian2genn
   set_device("genn")
 
-elif run_on == 'cuda_standalone':
+elif args.backend == 'cuda_standalone':
   import brian2cuda
   set_device("cuda_standalone")
 
 else:
   raise ValueError
 
-if len(sys.argv) > 2:
-  prefs.devices.cpp_standalone.openmp_threads = int(sys.argv[2])
+if args.threads > 1:
+  prefs.devices.cpp_standalone.openmp_threads = args.threads
+if args.dtype == 'f32':
+  prefs.core.default_float_dtype = float32
+elif args.dtype == 'f64':
+  prefs.core.default_float_dtype = float64
+else:
+  raise ValueError
+
 
 defaultclock.dt = 0.1 * ms
 
@@ -28,7 +40,7 @@ defaultclock.dt = 0.1 * ms
 def run_(scale=1., duration=1000., monitor=False):
   start_scope()
   device.reinit()
-  device.activate()
+  device.activate(directory=None)
 
   taum = 20 * ms
   taue = 5 * ms
@@ -82,12 +94,8 @@ def run_(scale=1., duration=1000., monitor=False):
 
 def benchmark(duration=1000.):
   final_results = dict()
-  if len(sys.argv) > 2:
-    name_ = run_on + f'-th{prefs.devices.cpp_standalone.openmp_threads}'
-  else:
-    name_ = run_on
-  fn = f'speed_results/brian2-COBA-{name_}.json'
-  if run_on == 'cpp_standalone':
+  fn = f'speed_results/brian2-COBA-{args.backend}-th{args.threads}-{args.dtype}.json'
+  if args.backend == 'cpp_standalone':
     scales = [1, 2, 4, 6, 8, 10, 20]
   else:
     scales = [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]
@@ -163,9 +171,8 @@ def visualize_spike_raster(duration=100.):
   plt.plot(mon.t / ms, mon.i, '.k', markersize=2,)
   ax.spines['top'].set_visible(False)
   ax.spines['right'].set_visible(False)
-  plt.title(f'Brian2 {run_on}')
-  plt.savefig(f'COBA-brian2-{run_on}.pdf')
-
+  plt.title(f'Brian2 {args.backend}')
+  plt.savefig(f'COBA-brian2-{args.backend}.pdf')
 
 
 if __name__ == '__main__':

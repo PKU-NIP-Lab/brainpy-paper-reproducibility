@@ -168,11 +168,8 @@ def benchmark(duration=1000., platform='cpu', x64=True):
 
   if platform == 'cpu':
     scales = [1, 2, 4, 6, 8, 10, 20]
-    scales = [10, 20, 30, 40]
   else:
     scales = [1, 2, 4, 6, 8, 10, 20, 40, 60, 80, 100]
-    scales = [60, 80, 100]
-
   final_results = dict()
   for scale in scales:
     for _ in range(4):

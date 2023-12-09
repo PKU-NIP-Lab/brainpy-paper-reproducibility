@@ -14,7 +14,6 @@ import json
 import matplotlib.pyplot as plt
 from pyNN.random import RandomDistribution
 from pyNN.utility import get_simulator, Timer, ProgressBar
-from quantities import ms
 import brainpy as bp
 
 
@@ -67,7 +66,7 @@ def run(scale=4., num_thread=1, duration=1000., monitor=False):
   all_cells.record('spikes')
 
   # initialize the cells
-  all_cells.initialize(v=RandomDistribution('normal', mu=-65., sigma=5.))
+  all_cells.initialize(v=RandomDistribution('normal', mu=-55., sigma=5.))
 
   # synapses
   connector = sim.FixedProbabilityConnector(pconn / scale, callback=ProgressBar(width=100))

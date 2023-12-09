@@ -14,34 +14,41 @@ Also see: https://brian2.readthedocs.io/en/latest/examples/frompapers.Wang_2002.
 # brainpy-tower2: 1324239
 
 from brian2 import *
-import sys
 import json
 import time
 
-# run_on = 'cpp_standalone'
-run_on = sys.argv[1]
+import argparse
 
-if run_on == 'cpp_standalone':
+parser = argparse.ArgumentParser()
+parser.add_argument('--backend', type=str, default='cpp_standalone',
+                    choices=['cpp_standalone', 'genn', 'cuda_standalone'])
+parser.add_argument('--dtype', type=str, default='f64', choices=['f64', 'f32'])
+parser.add_argument('--threads', type=int, default=1)
+args = parser.parse_args()
+
+
+if args.backend == 'cpp_standalone':
   set_device('cpp_standalone')
 
-elif run_on == 'genn':
+elif args.backend == 'genn':
   import brian2genn
   set_device("genn")
 
-elif run_on == 'cuda_standalone':
+elif args.backend == 'cuda_standalone':
   import brian2cuda
   set_device("cuda_standalone")
 
-elif run_on == 'cython':
-  pass
-
 else:
-  raise ValueError(f'Unsupported backend: {run_on}')
+  raise ValueError
 
-
-if len(sys.argv) > 2:
-  prefs.devices.cpp_standalone.openmp_threads = int(sys.argv[2])
-
+if args.threads > 1:
+  prefs.devices.cpp_standalone.openmp_threads = args.threads
+if args.dtype == 'f32':
+  prefs.core.default_float_dtype = float32
+elif args.dtype == 'f64':
+  prefs.core.default_float_dtype = float64
+else:
+  raise ValueError
 
 # -----------------------------------------------------------------------------------------------
 # set up the simulation
@@ -50,7 +57,7 @@ if len(sys.argv) > 2:
 def simulate_a_trial(scale=4.0, monitor=False):
   start_scope()
   device.reinit()
-  device.activate()
+  device.activate(directory=None)
 
   # stimulus and simulation parameters
   coh = 25.6  # coherence of random dots
@@ -308,14 +315,10 @@ def simulate_a_trial(scale=4.0, monitor=False):
 
 
 def benchmark():
-  device = run_on
-  if len(sys.argv) > 2:
-    device = f'{run_on}-th{sys.argv[2]}'
-
-  if run_on == 'cpp_standalone':
+  if args.backend == 'cpp_standalone':
     scales = [1, 4, 8, 10, 20, 40, 60, 80, 100]
-    n_time = 4
-  elif run_on == 'cuda_standalone':
+    n_time = 1
+  elif args.backend == 'cuda_standalone':
     scales = [1, 4, 8, 10, 20, 40, 60, 80, 100, 200, 400, 800, 1000]
     n_time = 1
   else:
@@ -332,11 +335,11 @@ def benchmark():
         final_results[r[0]] = {'exetime': [], 'runtime': []}
       final_results[r[0]]['exetime'].append(r[1])
       final_results[r[0]]['runtime'].append(r[2])
-    with open(f'speed_results/brian2-DMv2-{device}.json', 'w') as fout:
+    with open(f'speed_results/brian2-DMv2-{args.backend}-th{args.threads}-{args.dtype}.json', 'w') as fout:
       json.dump(final_results, fout, indent=2)
 
 
 if __name__ == '__main__':
-  # benchmark()
-  simulate_a_trial(scale=40, monitor=True)
+  benchmark()
+  # simulate_a_trial(scale=40, monitor=True)
 

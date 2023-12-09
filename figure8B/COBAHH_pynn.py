@@ -11,13 +11,13 @@ positional arguments:
 """
 
 import json
+
 import matplotlib.pyplot as plt
 from pyNN.random import RandomDistribution
 from pyNN.utility import get_simulator, Timer, ProgressBar
-from quantities import ms
 
 # === Configure the simulator ================================================
-sim, options = get_simulator(("--threads", "number of threads", {'type': int}),)
+sim, options = get_simulator(("--threads", "number of threads", {'type': int}), )
 
 # === Define parameters ========================================================
 
@@ -39,7 +39,7 @@ def run(scale=4., num_thread=1, duration=1000., monitor=False):
   wi = 67. / 1e3
   cell_params = {'gbar_Na': 20., 'gbar_K': 6., 'g_leak': 0.01,
                  'cm': 0.2, 'v_offset': -63.,
-                 'e_rev_Na': 50.,  'e_rev_K': -90., 'e_rev_leak': -60.,
+                 'e_rev_Na': 50., 'e_rev_K': -90., 'e_rev_leak': -60.,
                  'e_rev_E': 0., 'e_rev_I': -80., 'i_offset': 0.,
                  'tau_syn_E': 5., 'tau_syn_I': 10.}
 
@@ -48,10 +48,13 @@ def run(scale=4., num_thread=1, duration=1000., monitor=False):
   # create a single population of neurons, and then use population views to define
   # excitatory and inhibitory sub-populations
   all_cells = sim.Population(n_exc + n_inh, sim.HH_cond_exp(**cell_params), label="All Cells")
-  all_cells.record('spikes')
+  all_cells.record(['spikes'])
 
   # initialize the cells
-  all_cells.initialize(v=RandomDistribution('normal', mu=-55., sigma=5.))
+  all_cells.initialize(v=RandomDistribution('normal', mu=-65., sigma=5.))
+  all_cells.initialize(h=0.)
+  all_cells.initialize(m=0.)
+  all_cells.initialize(n=0.)
 
   # synapses
   connector = sim.FixedProbabilityConnector(pconn / scale, callback=ProgressBar(width=100))
@@ -84,13 +87,18 @@ def run(scale=4., num_thread=1, duration=1000., monitor=False):
     import brainpy as bp
     data = all_cells.get_data().segments[0]
     indices, times = data.spiketrains.multiplexed
+    # fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
+    # ax = fig.add_subplot(gs[0])
+    # h = data.filter(name="v")[0]
+    # plt.plot(h)
     fig, gs = bp.visualize.get_figure(1, 1, 4.5, 6.)
     ax = fig.add_subplot(gs[0])
     plt.plot(times, indices, '.k', markersize=2)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     plt.title(f'{options.simulator.upper()}')
-    plt.savefig(f'COBA-{options.simulator}-{options.threads}.pdf')
+    plt.savefig(f'COBAHH-{options.simulator}-{options.threads}.pdf')
+    # plt.show()
 
   # === Finished with simulator ==================================================
   sim.end()
@@ -101,11 +109,11 @@ def run(scale=4., num_thread=1, duration=1000., monitor=False):
 def benchmark(duration=1000.):
   final_results = dict()
   for scale in [1, 2, 4, 6, 8, 10, 20]:
-  # for scale in [1, ]:
+    # for scale in [1, ]:
     for _ in range(2):
       num, t_exe, t_py, fr = run(scale=scale, num_thread=options.threads, duration=duration, monitor=False)
       if num not in final_results:
-          final_results[num] = {'exetime': [], 'runtime': [], 'firing_rate': []}
+        final_results[num] = {'exetime': [], 'runtime': [], 'firing_rate': []}
       final_results[num]['exetime'].append(t_exe)
       final_results[num]['runtime'].append(t_py)
       final_results[num]['firing_rate'].append(fr)
@@ -116,4 +124,3 @@ def benchmark(duration=1000.):
 
 run(scale=1., num_thread=1, duration=1e2, monitor=True)
 # benchmark(5e3)
-
