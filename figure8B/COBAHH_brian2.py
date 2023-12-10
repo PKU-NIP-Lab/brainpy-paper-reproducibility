@@ -124,6 +124,33 @@ def check_firing_rate():
   simulate(scale=10, duration=1e3, monitor=True)
 
 
+def check_nan(duration=2e3, n_time=4):
+  file = open(f'{args.backend}-th{args.threads}.txt', 'w')
+
+  for scale in [1, 2, 4, 6, 8, 10, 20, 30, 40]:
+    num = int(4000 * scale)
+    all_nan_nums = []
+    for _ in range(n_time):
+      start_scope()
+      device.reinit()
+      device.activate(directory=None)
+      P = NeuronGroup(num, model=eqs, threshold='v>-20', refractory='v>-20', method='exponential_euler')
+      Pe = P[:int(3200 * scale)]
+      Pi = P[int(3200 * scale):]
+      Ce = Synapses(Pe, P, on_pre='ge += we')
+      Ci = Synapses(Pi, P, on_pre='gi += wi')
+      Ce.connect(p=80 / num)
+      Ci.connect(p=80 / num)
+      P.v = 'El + (randn() * 5 - 5)'
+      run(duration * ms)
+
+      num_nan = np.count_nonzero(np.isnan(np.asarray(P.v)))
+      all_nan_nums.append(num_nan)
+    print(f'scale={scale}, size={num}, nans = {all_nan_nums}, mean = {np.mean(all_nan_nums)}', file=file)
+    file.flush()
+
+
+
 def benchmark(duration=1000.):
   fn = f'speed_results/brian2-COBAHH-{args.backend}-th{args.threads}-{args.dtype}.json'
   if args.backend == 'cpp_standalone':
@@ -180,6 +207,7 @@ def visualize_spike_raster(scale, duration):
 
 if __name__ == '__main__':
   # check_firing_rate()
-  benchmark(duration=5e3)
+  # benchmark(duration=5e3)
+  check_nan(duration=5e3)
 
   # visualize_spike_raster(1., 100.)

@@ -47,13 +47,18 @@ class HH(bp.dyn.NeuDyn):
   def dV(self, V, t, m, h, n, Isyn):
     Isyn = self.sum_inputs(self.V.value, init=Isyn)  # sum projection inputs
     gna = g_Na * (m * m * m) * h
-    gkd = g_Kd * (n * n * n * n)
+    n2 = n * n
+    gkd = g_Kd * (n2 * n2)
     dVdt = (-gl * (V - El) - gna * (V - ENa) - gkd * (V - EK) + Isyn) / Cm
     return dVdt
 
   def dm(self, m, t, V, ):
-    m_alpha = 0.32 * (13 - V + VT) / (bm.exp((13 - V + VT) / 4) - 1.)
-    m_beta = 0.28 * (V - VT - 40) / (bm.exp((V - VT - 40) / 5) - 1)
+    if bm.float_ == bm.float64:
+      m_alpha = 0.32 * (13 - V + VT) / (bm.exp((13 - V + VT) / 4) - 1.)
+      m_beta = 0.28 * (V - VT - 40) / (bm.exp((V - VT - 40) / 5) - 1)
+    else:
+      m_alpha = 1.28 / bm.exprel((13 - V + VT) / 4)
+      m_beta = 1.4 / bm.exprel((V - VT - 40) / 5)
     dmdt = (m_alpha * (1 - m) - m_beta * m)
     return dmdt
 
@@ -64,15 +69,17 @@ class HH(bp.dyn.NeuDyn):
     return dhdt
 
   def dn(self, n, t, V):
-    c = 15 - V + VT
-    n_alpha = 0.032 * c / (bm.exp(c / 5) - 1.)
-    n_beta = .5 * bm.exp((10 - V + VT) / 40)
+    if bm.float_ == bm.float64:
+      c = 15 - V + VT
+      n_alpha = 0.032 * c / (bm.exp(c / 5) - 1.)
+    else:
+      n_alpha = 0.16 / bm.exprel((15 - V + VT) / 5.)
+    n_beta = 0.5 * bm.exp((10 - V + VT) / 40)
     dndt = (n_alpha * (1 - n) - n_beta * n)
     return dndt
 
   def update(self, inp=0.):
-    V, m, h, n = self.integral(self.V, self.m, self.h, self.n, bp.share['t'],
-                               Isyn=inp, dt=bp.share['dt'])
+    V, m, h, n = self.integral(self.V, self.m, self.h, self.n, bp.share['t'], Isyn=inp, dt=bp.share['dt'])
     self.spike.value = bm.logical_and(self.V < V_th, V >= V_th)
     self.m.value = m
     self.h.value = h
@@ -162,6 +169,25 @@ def check_firing_rate(x64=True, platform='cpu'):
     run_a_simulation(scale=scale, duration=2e3, platform=platform, x64=x64, monitor=True)
 
 
+def check_nan(x64=True, platform='cpu', duration=2e3, n_time=4):
+  bm.set_platform(platform)
+  if x64:
+    bm.enable_x64()
+  else:
+    bm.disable_x64()
+  indices = np.arange(int(duration / bm.get_dt()))
+
+  for scale in [1, 2, 4, 6, 8, 10, 20, 30, 40]:
+    all_nan_nums = []
+    for _ in range(n_time):
+      net = COBA_HH_Net(scale=scale)
+      bm.for_loop(net.step_run, indices, progress_bar=True)
+      num_nan = np.count_nonzero(np.isnan(np.asarray(net.N.V.value)))
+      bm.clear_buffer_memory(platform)
+      all_nan_nums.append(num_nan)
+    print(f'scale={scale}, size={net.num}, nans = {all_nan_nums}, mean = {np.mean(all_nan_nums)}')
+
+
 def benchmark(duration=1000., platform='cpu', x64=True):
   postfix = 'x64' if x64 else 'x32'
   fn = f'speed_results/brainpy-COBAHH-{platform}-{postfix}.json'
@@ -210,4 +236,5 @@ if __name__ == '__main__':
 
   # visualize_spike_raster(duration=100., platform=args.platform, x64=args.x64)
   benchmark(duration=5. * 1e3, platform=args.platform, x64=args.x64)
+  # check_nan(duration=5. * 1e3, platform=args.platform, x64=args.x64)
   # check_firing_rate(x64=args.x64, platform=args.platform)
