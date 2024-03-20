@@ -40,7 +40,7 @@ class LIF(bp.dyn.NeuDyn):
     self.t_last_spike = bm.Variable(bm.ones(self.num) * -1e7)
 
   def update(self, inp):
-    inp = self.sum_inputs(self.V.value, init=inp)  # sum all projection inputs
+    inp = self.sum_current_inputs(self.V.value, init=inp)  # sum all projection inputs
     refractory = (bp.share['t'] - self.t_last_spike) <= self.tau_ref
     V = self.V + (-self.V + self.V_rest + inp) / self.tau * bp.share['dt']
     V = bm.where(refractory, self.V, V)
@@ -54,7 +54,7 @@ class LIF(bp.dyn.NeuDyn):
 class Exponential(bp.Projection):
   def __init__(self, num_pre, post, prob, g_max, tau, E):
     super().__init__()
-    self.proj = bp.dyn.ProjAlignPostMg1(
+    self.proj = bp.dyn.HalfProjAlignPostMg(
       comm=bp.dnn.EventCSRLinear(bp.conn.FixedProb(prob, pre=num_pre, post=post.num, allow_multi_conn=True), g_max),
       syn=bp.dyn.Expon.desc(post.num, tau=tau),
       out=bp.dyn.COBA.desc(E=E),
@@ -156,9 +156,9 @@ def benchmark(duration=1000., platform='cpu', x64=True):
 
 if __name__ == '__main__':
   x64 = False if sys.argv[1] == '0' else True
-  benchmark(duration=5e3, platform='gpu', x64=x64)
+  # benchmark(duration=5e3, platform='gpu', x64=x64)
 
-  # check_firing_rate(platform='gpu')
+  check_firing_rate(platform='gpu')
 
   # visualize_spike_raster(x64=False, platform='gpu')
 

@@ -45,7 +45,7 @@ class HH(bp.dyn.NeuDyn):
     self.integral = bp.odeint(bp.JointEq(self.dV, self.dm, self.dh, self.dn), method=method)
 
   def dV(self, V, t, m, h, n, Isyn):
-    Isyn = self.sum_inputs(self.V.value, init=Isyn)  # sum projection inputs
+    Isyn = self.sum_current_inputs(self.V.value, init=Isyn)  # sum projection inputs
     gna = g_Na * (m * m * m) * h
     n2 = n * n
     gkd = g_Kd * (n2 * n2)
@@ -92,7 +92,7 @@ class Exponential(bp.Projection):
   def __init__(self, num_pre, post, prob, g_max, tau, E):
     super().__init__()
 
-    self.proj = bp.dyn.ProjAlignPostMg1(
+    self.proj = bp.dyn.HalfProjAlignPostMg(
       comm=bp.dnn.EventCSRLinear(bp.conn.FixedProb(prob, pre=num_pre, post=post.num, allow_multi_conn=True), g_max),
       # comm=bp.dnn.EventJitFPHomoLinear(num_pre, post.num, prob, g_max),
       syn=bp.dyn.Expon.desc(post.num, tau=tau),
@@ -164,9 +164,9 @@ def run_a_simulation(scale=10, duration=1e3, platform='cpu', x64=True, monitor=F
 
 
 def check_firing_rate(x64=True, platform='cpu'):
-  # for scale in [1, 2, 4, 6, 8, 10, 20, 30, 40, 50]:
-  for scale in [20, 30, 40, 50]:
-    run_a_simulation(scale=scale, duration=2e3, platform=platform, x64=x64, monitor=True)
+  for scale in [1, 2, 4, 6, 8, 10, 20, 30, 40, 50, 80, 100]:
+  # for scale in [20, 30, 40, 50]:
+    run_a_simulation(scale=scale, duration=2e3, platform=platform, x64=x64, monitor=False)
 
 
 def check_nan(x64=True, platform='cpu', duration=2e3, n_time=4):
@@ -235,6 +235,6 @@ if __name__ == '__main__':
   args = parser.parse_args()
 
   # visualize_spike_raster(duration=100., platform=args.platform, x64=args.x64)
-  benchmark(duration=5. * 1e3, platform=args.platform, x64=args.x64)
+  # benchmark(duration=5. * 1e3, platform=args.platform, x64=args.x64)
   # check_nan(duration=5. * 1e3, platform=args.platform, x64=args.x64)
-  # check_firing_rate(x64=args.x64, platform=args.platform)
+  check_firing_rate(x64=args.x64, platform=args.platform)
